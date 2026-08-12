@@ -1,0 +1,484 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'dart:math' as math;
+import '../../viewmodels/feed_viewmodel.dart';
+import '../../viewmodels/auth_viewmodel.dart';
+
+// ─── Couleurs eForum ──────────────────────────────────────────────────────────
+
+const _ink     = Color(0xFF07090F);
+const _surface = Color(0xFF0E1119);
+const _card    = Color(0xFF131824);
+const _line    = Color(0xFF1C2236);
+const _neon    = Color(0xFF00E676);
+const _txt     = Color(0xFFCDD5F0);
+const _mut     = Color(0xFF485070);
+const _clan    = Color(0xFFFFCC02);
+const _build   = Color(0xFFCE93D8);
+const _chat    = Color(0xFFFF8A65);
+
+const int _maxChars = 280;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CREATE POST SCREEN
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class CreatePostScreen extends ConsumerStatefulWidget {
+  const CreatePostScreen({super.key});
+
+  @override
+  ConsumerState<CreatePostScreen> createState() => _CreatePostScreenState();
+}
+
+class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
+  final _contentController = TextEditingController();
+  final _focusNode = FocusNode();
+  bool _isPublishing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _contentController.addListener(() => setState(() {}));
+    // Focus automatique sur le champ de texte
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _contentController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  int get _charCount => _contentController.text.length;
+  bool get _canPublish => _charCount > 0 && _charCount <= _maxChars && !_isPublishing;
+  double get _charProgress => math.min(_charCount / _maxChars, 1.0);
+
+  // ─── Couleur du compteur selon la progression ──────────────────────────────
+
+  Color get _counterColor {
+    if (_charProgress >= 1.0) return const Color(0xFFFF5252);
+    if (_charProgress >= 0.85) return _clan;
+    return _mut;
+  }
+
+  // ─── Publier le post ───────────────────────────────────────────────────────
+
+  Future<void> _publish() async {
+    if (!_canPublish) return;
+    setState(() => _isPublishing = true);
+
+    final success = await ref.read(feedViewModelProvider.notifier).createPost(
+          content: _contentController.text.trim(),
+        );
+
+    if (!mounted) return;
+
+    if (success) {
+      context.pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle_rounded, color: _neon, size: 18),
+              SizedBox(width: 8),
+              Text('Post publié !', style: TextStyle(color: _txt)),
+            ],
+          ),
+          backgroundColor: _card,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+    } else {
+      setState(() => _isPublishing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Erreur lors de la publication.',
+              style: TextStyle(color: Color(0xFFFF5252))),
+          backgroundColor: _card,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUser = ref.watch(currentUserProvider);
+
+    return Scaffold(
+      backgroundColor: _ink,
+      body: Column(
+        children: [
+          SizedBox(height: MediaQuery.of(context).padding.top),
+
+          // ── Header ──────────────────────────────────────────────────────────
+          _buildHeader(),
+
+          // ── Corps ───────────────────────────────────────────────────────────
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Zone de rédaction
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Avatar
+                      _buildAvatar(currentUser?.photoURL),
+                      const SizedBox(width: 12),
+
+                      // Champ texte
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Username
+                            Text(
+                              currentUser?.username ?? 'joueur',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: _txt,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+
+                            // Champ de texte
+                            TextField(
+                              controller: _contentController,
+                              focusNode: _focusNode,
+                              maxLines: null,
+                              keyboardType: TextInputType.multiline,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: _txt,
+                                height: 1.55,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText:
+                                    'Partage ton build, ton résultat, ton avis...',
+                                hintStyle: TextStyle(
+                                  color: _mut,
+                                  fontSize: 16,
+                                  height: 1.55,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.zero,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // ── Section "Ajouter au post" ────────────────────────────────
+                  _buildAddToPost(),
+
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Barre du bas ────────────────────────────────────────────────────
+          _buildBottomBar(),
+        ],
+      ),
+    );
+  }
+
+  // ─── Header ────────────────────────────────────────────────────────────────
+
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: const BoxDecoration(
+        color: _ink,
+        border: Border(bottom: BorderSide(color: _line)),
+      ),
+      child: Row(
+        children: [
+          // Bouton fermer
+          GestureDetector(
+            onTap: () => context.pop(),
+            child: Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.close_rounded, color: _txt, size: 22),
+            ),
+          ),
+
+          const Expanded(
+            child: Center(
+              child: Text(
+                'Nouveau post',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: _txt,
+                ),
+              ),
+            ),
+          ),
+
+          // Bouton publier
+          GestureDetector(
+            onTap: _canPublish ? _publish : null,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(
+                color: _canPublish ? _neon : _neon.withOpacity(0.25),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: _isPublishing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: _ink,
+                      ),
+                    )
+                  : Text(
+                      'Publier',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w800,
+                        color: _canPublish ? _ink : _neon.withOpacity(0.5),
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Avatar ────────────────────────────────────────────────────────────────
+
+  Widget _buildAvatar(String? photoURL) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: _neon.withOpacity(0.15),
+        border: Border.all(color: _line),
+        image: photoURL != null
+            ? DecorationImage(
+                image: NetworkImage(photoURL),
+                fit: BoxFit.cover,
+              )
+            : null,
+      ),
+      child: photoURL == null
+          ? const Center(
+              child: Icon(Icons.person_rounded, color: _neon, size: 22),
+            )
+          : null,
+    );
+  }
+
+  // ─── Section "Ajouter au post" ─────────────────────────────────────────────
+
+  Widget _buildAddToPost() {
+    final actions = [
+      {'icon': Icons.image_outlined, 'label': 'Image', 'color': _neon},
+      {'icon': Icons.bolt_outlined, 'label': 'Un build', 'color': _build},
+      {'icon': Icons.shield_outlined, 'label': 'Un clan', 'color': _clan},
+      {'icon': Icons.people_outline_rounded, 'label': 'Sondage', 'color': _chat},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'AJOUTER AU POST',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: _mut,
+              letterSpacing: 2,
+            ),
+          ),
+          const SizedBox(height: 12),
+          GridView.count(
+            crossAxisCount: 2,
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 3.2,
+            children: actions.map((action) {
+              final color = action['color'] as Color;
+              return GestureDetector(
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        '${action['label']} — bientôt disponible',
+                        style: const TextStyle(color: _txt),
+                      ),
+                      backgroundColor: _card,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _line),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        action['icon'] as IconData,
+                        color: color,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        action['label'] as String,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _txt,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Barre du bas ──────────────────────────────────────────────────────────
+
+  Widget _buildBottomBar() {
+    final remaining = _maxChars - _charCount;
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: _surface,
+        border: Border(top: BorderSide(color: _line)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        12,
+        16,
+        MediaQuery.of(context).padding.bottom + 12,
+      ),
+      child: Row(
+        children: [
+          // Icônes raccourcis
+          Icon(Icons.image_outlined, color: _neon, size: 22),
+          const SizedBox(width: 20),
+          Icon(Icons.bolt_outlined, color: _build, size: 22),
+          const SizedBox(width: 20),
+          Icon(Icons.shield_outlined, color: _clan, size: 22),
+
+          const Spacer(),
+
+          // Compteur de caractères
+          if (_charCount > 0) ...[
+            Text(
+              remaining >= 0 ? '$remaining' : '${remaining.abs()} en trop',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: _counterColor,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+
+          // Cercle de progression
+          SizedBox(
+            width: 26,
+            height: 26,
+            child: CustomPaint(
+              painter: _CircleProgressPainter(
+                progress: _charProgress,
+                color: _counterColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAINTER — Cercle de progression des caractères
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _CircleProgressPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _CircleProgressPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width / 2 - 2;
+
+    // Fond
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = _line
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+
+    // Arc de progression
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -math.pi / 2,
+      2 * math.pi * progress,
+      false,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CircleProgressPainter old) =>
+      old.progress != progress || old.color != color;
+}

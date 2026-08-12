@@ -1,35 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
-
-// TODO: générer firebase_options.dart avec FlutterFire CLI
-// import 'firebase_options.dart';
+import 'core/router/app_router.dart';
+import 'package:timeago/timeago.dart' as timeago;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  timeago.setLocaleMessages('fr', timeago.FrMessages());
   await Firebase.initializeApp(
-    // options: DefaultFirebaseOptions.currentPlatform,
+    options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const ProviderScope(child: EFootyApp()));
+  runApp(const ProviderScope(child: EForumApp()));
 }
 
-class EFootyApp extends StatelessWidget {
-  const EFootyApp({super.key});
+class EForumApp extends ConsumerWidget {
+  const EForumApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'eFooty',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final router = ref.watch(appRouterProvider);
+
+    return MaterialApp.router(
+      title: 'eForum',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      // TODO: brancher go_router
-      home: const Scaffold(
-        body: Center(
-          child: Text('eFooty — En construction 🚧',
-            style: TextStyle(color: Colors.white)),
-        ),
-      ),
+      routerConfig: router,
     );
   }
 }
