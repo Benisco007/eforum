@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../viewmodels/auth_viewmodel.dart';
@@ -26,7 +27,9 @@ const _chat    = Color(0xFFFF8A65);
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final bool showBackButton;
-  const ProfileScreen({super.key, this.showBackButton = true});
+  final String? uid; // null = profil de l'user connecté, sinon profil d'un autre
+
+  const ProfileScreen({super.key, this.showBackButton = true, this.uid});
 
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
@@ -51,7 +54,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider);
-    final feedState = ref.watch(feedViewModelProvider);
+    final feedState   = ref.watch(feedViewModelProvider);
+    final isOwnProfile = widget.uid == null || widget.uid == currentUser?.uid;
+
+    if (!isOwnProfile) {
+      return _OtherProfileScreen(
+        uid: widget.uid!,
+        currentUserId: currentUser?.uid ?? '',
+      );
+    }
 
     if (currentUser == null) {
       return const Scaffold(
@@ -109,6 +120,113 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             _buildPostsTab(userPosts),
             _buildBuildsTab(),
             _buildClansTab(currentUser),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Menu settings ────────────────────────────────────────────────────────
+
+  void _showSettingsMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF131824),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        side: BorderSide(color: Color(0xFF1C2236)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C2236),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Paramètres',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFFCDD5F0),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Modifier le profil
+            _SettingsItem(
+              icon: Icons.edit_outlined,
+              label: 'Modifier le profil',
+              color: _neon,
+              onTap: () => Navigator.pop(context),
+            ),
+            const SizedBox(height: 10),
+
+            // Déconnexion
+            _SettingsItem(
+              icon: Icons.logout_rounded,
+              label: 'Se déconnecter',
+              color: const Color(0xFFEF5350),
+              onTap: () {
+                Navigator.pop(context);
+                showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    backgroundColor: const Color(0xFF131824),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: const BorderSide(color: Color(0xFF1C2236)),
+                    ),
+                    title: const Text(
+                      'Déconnexion',
+                      style: TextStyle(
+                        color: Color(0xFFCDD5F0),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    content: const Text(
+                      'Tu vas être déconnecté de ton compte eForum.',
+                      style: TextStyle(
+                        color: Color(0xFF485070),
+                        fontSize: 14,
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text(
+                          'Annuler',
+                          style: TextStyle(color: Color(0xFF485070)),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          ref.read(authViewModelProvider.notifier).logout();
+                        },
+                        child: const Text(
+                          'Déconnexion',
+                          style: TextStyle(
+                            color: Color(0xFFEF5350),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ],
         ),
       ),
@@ -193,7 +311,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               right: 12,
               child: _CircleButton(
                 icon: Icons.settings_outlined,
-                onTap: () {},
+                onTap: () => _showSettingsMenu(context),
               ),
             ),
 
@@ -834,6 +952,49 @@ class _StatChip extends StatelessWidget {
   }
 }
 
+class _SettingsItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _SettingsItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 12),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar tabBar;
 
@@ -859,4 +1020,391 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(_TabBarDelegate old) => false;
+}
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROFIL D'UN AUTRE UTILISATEUR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _OtherProfileScreen extends ConsumerStatefulWidget {
+  final String uid;
+  final String currentUserId;
+  const _OtherProfileScreen({
+    required this.uid,
+    required this.currentUserId,
+  });
+
+  @override
+  ConsumerState<_OtherProfileScreen> createState() =>
+      _OtherProfileScreenState();
+}
+
+class _OtherProfileScreenState
+    extends ConsumerState<_OtherProfileScreen> {
+  UserModel? _user;
+  bool _isLoading = true;
+  bool _isFollowing = false;
+  bool _followLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.uid)
+          .get();
+      if (doc.exists && mounted) {
+        final user = UserModel.fromFirestore(doc);
+        // Vérifier si déjà suivi
+        final followDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.uid)
+            .collection('followers')
+            .doc(widget.currentUserId)
+            .get();
+        setState(() {
+          _user = user;
+          _isFollowing = followDoc.exists;
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_followLoading) return;
+    setState(() => _followLoading = true);
+
+    final batch = FirebaseFirestore.instance.batch();
+    final followerRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.uid)
+        .collection('followers')
+        .doc(widget.currentUserId);
+    final followingRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(widget.currentUserId)
+        .collection('following')
+        .doc(widget.uid);
+
+    if (_isFollowing) {
+      // Unfollow
+      batch.delete(followerRef);
+      batch.delete(followingRef);
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(widget.uid),
+        {'followersCount': FieldValue.increment(-1)},
+      );
+      batch.update(
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.currentUserId),
+        {'followingCount': FieldValue.increment(-1)},
+      );
+    } else {
+      // Follow
+      batch.set(followerRef, {'uid': widget.currentUserId, 'followedAt': Timestamp.now()});
+      batch.set(followingRef, {'uid': widget.uid, 'followedAt': Timestamp.now()});
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(widget.uid),
+        {'followersCount': FieldValue.increment(1)},
+      );
+      batch.update(
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.currentUserId),
+        {'followingCount': FieldValue.increment(1)},
+      );
+    }
+
+    await batch.commit();
+    setState(() {
+      _isFollowing = !_isFollowing;
+      _followLoading = false;
+    });
+  }
+
+  Future<void> _openChat() async {
+    // Générer conversationId = UIDs triés et concaténés
+    final ids = [widget.currentUserId, widget.uid]..sort();
+    final convId = '${ids[0]}_${ids[1]}';
+
+    // Créer la conversation si elle n'existe pas
+    final ref = FirebaseFirestore.instance
+        .collection('conversations')
+        .doc(convId);
+    final doc = await ref.get();
+    if (!doc.exists) {
+      await ref.set({
+        'participants': [widget.currentUserId, widget.uid],
+        'lastMessage': null,
+        'lastMessageAt': null,
+        'unreadCount': {widget.currentUserId: 0, widget.uid: 0},
+      });
+    }
+
+    if (mounted) {
+      final username = _user?.username ?? '';
+      context.push('/messages/$convId?otherUserId=${widget.uid}&otherUsername=$username');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: _ink,
+        body: Center(
+          child: CircularProgressIndicator(color: _neon, strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (_user == null) {
+      return Scaffold(
+        backgroundColor: _ink,
+        appBar: AppBar(
+          backgroundColor: _surface,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_rounded, color: _txt),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: const Center(
+          child: Text('Utilisateur introuvable',
+              style: TextStyle(color: _mut)),
+        ),
+      );
+    }
+
+    final user = _user!;
+
+    return Scaffold(
+      backgroundColor: _ink,
+      body: CustomScrollView(
+        slivers: [
+          // ── AppBar + Bannière ────────────────────────────────────────────
+          SliverAppBar(
+            expandedHeight: 180,
+            pinned: true,
+            backgroundColor: _surface,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, color: _txt),
+              onPressed: () => context.pop(),
+            ),
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: BoxDecoration(
+                  color: _card,
+                  image: user.teamPhotoURL != null
+                      ? DecorationImage(
+                          image: NetworkImage(user.teamPhotoURL!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        _ink.withOpacity(0.8),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Avatar + boutons
+                  Row(
+                    children: [
+                      // Avatar
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _neon.withOpacity(0.12),
+                          border: Border.all(color: _neon, width: 2),
+                          image: user.photoURL != null
+                              ? DecorationImage(
+                                  image: NetworkImage(user.photoURL!),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
+                        ),
+                        child: user.photoURL == null
+                            ? const Icon(Icons.person_rounded,
+                                color: _neon, size: 36)
+                            : null,
+                      ),
+                      const Spacer(),
+
+                      // Bouton message
+                      GestureDetector(
+                        onTap: _openChat,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: _card,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: _line),
+                          ),
+                          child: const Icon(Icons.mail_outline_rounded,
+                              color: _txt, size: 18),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+
+                      // Bouton follow
+                      GestureDetector(
+                        onTap: _toggleFollow,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _isFollowing
+                                ? Colors.transparent
+                                : _neon,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _isFollowing ? _line : _neon,
+                            ),
+                          ),
+                          child: _followLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: _neon,
+                                  ),
+                                )
+                              : Text(
+                                  _isFollowing ? 'Abonné' : 'Suivre',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: _isFollowing ? _txt : _ink,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Nom
+                  Text(
+                    user.username,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: _txt,
+                    ),
+                  ),
+                  Text(
+                    '@${user.username}',
+                    style: const TextStyle(fontSize: 13, color: _mut),
+                  ),
+
+                  if (user.bio != null && user.bio!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(user.bio!,
+                        style: const TextStyle(
+                            fontSize: 13, color: _txt, height: 1.5)),
+                  ],
+
+                  const SizedBox(height: 16),
+
+                  // Stats
+                  Row(
+                    children: [
+                      _StatItem(
+                          value: user.followersCount.toString(),
+                          label: 'Abonnés'),
+                      const SizedBox(width: 24),
+                      _StatItem(
+                          value: user.followingCount.toString(),
+                          label: 'Abonnements'),
+                    ],
+                  ),
+
+                  if (user.favPlayerName != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _card,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _line),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text('⚽', style: TextStyle(fontSize: 20)),
+                          const SizedBox(width: 10),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Joueur préféré',
+                                  style: TextStyle(
+                                      fontSize: 11, color: _mut)),
+                              Text(user.favPlayerName!,
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: _txt)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String value;
+  final String label;
+  const _StatItem({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value,
+            style: const TextStyle(
+                fontSize: 18, fontWeight: FontWeight.w800, color: _txt)),
+        Text(label,
+            style: const TextStyle(fontSize: 12, color: _mut)),
+      ],
+    );
+  }
 }

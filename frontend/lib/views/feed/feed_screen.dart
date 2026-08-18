@@ -5,32 +5,38 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../viewmodels/feed_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../data/models/post_model.dart';
+import '../../data/models/user_model.dart';
 import '../../core/router/app_router.dart';
 import '../profile/profile_screen.dart';
 import '../search/search_screen.dart';
+import '../../data/repositories/user_repository.dart';
 
-// ─── Couleurs eForum ──────────────────────────────────────────────────────────
-
-const _ink = Color(0xFF07090F);
+const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
-const _card = Color(0xFF131824);
-const _line = Color(0xFF1C2236);
-const _neon = Color(0xFF00E676);
-const _txt = Color(0xFFCDD5F0);
-const _mut = Color(0xFF485070);
-const _clan = Color(0xFFFFCC02);
-const _build = Color(0xFFCE93D8);
-const _chat = Color(0xFFFF8A65);
-
-// ─── Données mock clans (stories) ─────────────────────────────────────────────
+const _card    = Color(0xFF131824);
+const _line    = Color(0xFF1C2236);
+const _neon    = Color(0xFF00E676);
+const _txt     = Color(0xFFCDD5F0);
+const _mut     = Color(0xFF485070);
+const _clan    = Color(0xFFFFCC02);
+const _build   = Color(0xFFCE93D8);
+const _chat    = Color(0xFFFF8A65);
 
 const _mockClans = [
   {'tag': 'TFC', 'name': 'Teranga FC', 'color': 0xFF00E676},
   {'tag': 'LDM', 'name': 'Lions Mandé', 'color': 0xFFFFCC02},
-  {'tag': 'EKS', 'name': 'Ekassa', 'color': 0xFFCE93D8},
-  {'tag': 'ABJ', 'name': 'Abidjan FC', 'color': 0xFFFF8A65},
-  {'tag': 'LAG', 'name': 'Lagos Boys', 'color': 0xFF4FC3F7},
+  {'tag': 'EKS', 'name': 'Ekassa',      'color': 0xFFCE93D8},
+  {'tag': 'ABJ', 'name': 'Abidjan FC',  'color': 0xFFFF8A65},
+  {'tag': 'LAG', 'name': 'Lagos Boys',  'color': 0xFF4FC3F7},
 ];
+
+// ─── Provider profil auteur ───────────────────────────────────────────────────
+
+final userProfileProvider =
+    FutureProvider.family<UserModel?, String>((ref, uid) async {
+  final repo = UserRepository();
+  return repo.getUserById(uid);
+});
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // FEED SCREEN
@@ -77,7 +83,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       body: IndexedStack(
         index: _navIndex,
         children: [
-          // Index 0: Accueil (Feed)
           Column(
             children: [
               SizedBox(height: MediaQuery.of(context).padding.top),
@@ -94,25 +99,15 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
               ),
             ],
           ),
-
-          // Index 1: Recherche
           const SearchScreen(),
-
-          // Index 2: Bouton + (plein écran via push)
           const SizedBox.expand(),
-
-          // Index 3: Clans (placeholder)
           _buildClansPlaceholder(),
-
-          // Index 4: Profil (sans bouton retour)
           const ProfileScreen(showBackButton: false),
         ],
       ),
       bottomNavigationBar: _buildBottomNav(context),
     );
   }
-
-  // ─── Header ────────────────────────────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -123,119 +118,50 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       padding: const EdgeInsets.fromLTRB(16, 8, 12, 0),
       child: Row(
         children: [
-          // Logo + nom
-          Row(
-            children: [
-              Container(
-                width: 32,
-                height: 32,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _neon,
-                ),
-                child: const Center(
-                  child: Text(
-                    'eF',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w900,
-                      color: _ink,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              RichText(
-                text: const TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'e',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: _txt,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    TextSpan(
-                      text: 'Forum',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: _neon,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Container(
+            width: 32, height: 32,
+            decoration: const BoxDecoration(shape: BoxShape.circle, color: _neon),
+            child: const Center(
+              child: Text('eF', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _ink)),
+            ),
           ),
-
+          const SizedBox(width: 10),
+          RichText(
+            text: const TextSpan(children: [
+              TextSpan(text: 'e', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _txt, letterSpacing: -0.5)),
+              TextSpan(text: 'Forum', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: _neon, letterSpacing: -0.5)),
+            ]),
+          ),
           const Spacer(),
-
-          // Icône chat
-          _HeaderIconButton(
-            icon: Icons.chat_bubble_outline_rounded,
-            hasDot: true,
-            dotColor: _chat,
-            onTap: () {},
-          ),
-
-          // Icône notifications
-          _HeaderIconButton(
-            icon: Icons.notifications_none_rounded,
-            badge: '3',
-            onTap: () {},
-          ),
+          _HeaderIconButton(icon: Icons.chat_bubble_outline_rounded, hasDot: true, dotColor: _chat, onTap: () => context.push(AppRoutes.messages)),
+          _HeaderIconButton(icon: Icons.notifications_none_rounded, badge: '3', onTap: () => context.push(AppRoutes.notifications)),
         ],
       ),
     );
   }
 
-  // ─── Tabs ──────────────────────────────────────────────────────────────────
-
   Widget _buildTabs() {
     return Container(
-      decoration: const BoxDecoration(
-        color: _ink,
-        border: Border(bottom: BorderSide(color: _line)),
-      ),
+      decoration: const BoxDecoration(color: _ink, border: Border(bottom: BorderSide(color: _line))),
       child: TabBar(
         controller: _tabController,
         labelColor: _neon,
         unselectedLabelColor: _mut,
-        labelStyle: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.1,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-        ),
+        labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+        unselectedLabelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         indicatorColor: _neon,
         indicatorWeight: 2.5,
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
-        tabs: const [
-          Tab(text: 'Pour toi'),
-          Tab(text: 'Abonnements'),
-        ],
+        tabs: const [Tab(text: 'Pour toi'), Tab(text: 'Abonnements')],
       ),
     );
   }
 
-  // ─── Onglet "Pour toi" ─────────────────────────────────────────────────────
-
   Widget _buildForYouTab(FeedState feedState) {
-    // FeedInitial : le viewmodel vient de démarrer, chargement en cours
     if (feedState is FeedInitial) {
-      return const Center(
-        child: CircularProgressIndicator(color: _neon, strokeWidth: 2),
-      );
+      return const Center(child: CircularProgressIndicator(color: _neon, strokeWidth: 2));
     }
-
     return RefreshIndicator(
       color: _neon,
       backgroundColor: _card,
@@ -245,16 +171,9 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       },
       child: CustomScrollView(
         slivers: [
-          // Stories clans
           SliverToBoxAdapter(child: _buildClanStories()),
-
-          // Posts
           if (feedState is FeedLoading)
-            const SliverFillRemaining(
-              child: Center(
-                child: CircularProgressIndicator(color: _neon, strokeWidth: 2),
-              ),
-            )
+            const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: _neon, strokeWidth: 2)))
           else if (feedState is FeedError)
             SliverFillRemaining(
               child: Center(
@@ -263,14 +182,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                   children: [
                     const Icon(Icons.wifi_off_rounded, color: _mut, size: 40),
                     const SizedBox(height: 12),
-                    Text(feedState.message,
-                        style: const TextStyle(color: _mut, fontSize: 13)),
+                    Text(feedState.message, style: const TextStyle(color: _mut, fontSize: 13)),
                     const SizedBox(height: 16),
                     TextButton(
-                      onPressed: () =>
-                          ref.read(feedViewModelProvider.notifier).loadFeed(),
-                      child: const Text('Réessayer',
-                          style: TextStyle(color: _neon)),
+                      onPressed: () => ref.read(feedViewModelProvider.notifier).loadFeed(),
+                      child: const Text('Réessayer', style: TextStyle(color: _neon)),
                     ),
                   ],
                 ),
@@ -285,12 +201,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                   if (index == feedState.posts.length) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Center(
-                        child: Text(
-                          'Tu es à jour ',
-                          style: TextStyle(color: _mut, fontSize: 12.5),
-                        ),
-                      ),
+                      child: Center(child: Text('Tu es à jour ✅', style: TextStyle(color: _mut, fontSize: 12.5))),
                     );
                   }
                   return PostCard(post: feedState.posts[index]);
@@ -303,47 +214,34 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     );
   }
 
-  // ─── Onglet "Abonnements" ──────────────────────────────────────────────────
-
   Widget _buildFollowingTab(FeedState feedState) {
-    if (feedState is FeedLoaded && feedState.posts.isEmpty) {
-      return const _EmptyFollowing();
-    }
+    if (feedState is FeedLoaded && feedState.posts.isEmpty) return const _EmptyFollowing();
     return _buildForYouTab(feedState);
   }
-
-  // ─── Stories clans ─────────────────────────────────────────────────────────
 
   Widget _buildClanStories() {
     return Container(
       height: 72,
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _line)),
-      ),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _line))),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         itemCount: _mockClans.length,
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          final clan = _mockClans[index];
-          final color = Color(clan['color'] as int);
-          // Carré coloré sans texte — tag retiré
+          final color = Color(_mockClans[index]['color'] as int);
           return Container(
-            width: 52,
-            height: 52,
+            width: 52, height: 52,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: color.withValues(alpha: 0.18),
-              border: Border.all(color: color.withValues(alpha: 0.5), width: 2),
+              color: color.withOpacity(0.18),
+              border: Border.all(color: color.withOpacity(0.5), width: 2),
             ),
           );
         },
       ),
     );
   }
-
-  // ─── Bottom Nav ────────────────────────────────────────────────────────────
 
   Widget _buildBottomNav(BuildContext context) {
     final leftItems = [
@@ -366,85 +264,46 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             children: [
               Icon(icon, color: isActive ? _neon : _mut, size: 24),
               const SizedBox(height: 3),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-                  color: isActive ? _neon : _mut,
-                ),
-              ),
+              Text(label, style: TextStyle(fontSize: 10, fontWeight: isActive ? FontWeight.w700 : FontWeight.w400, color: isActive ? _neon : _mut)),
             ],
           ),
         ),
       );
     }
 
-    // La barre flottante arr ondie : on utilise un ColoredBox transparent
-    // pour que Scaffold connaisse la vraie hauteur occupée (marges incluses)
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).padding.bottom + 12,
-            top: 6,
-          ),
+          padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(context).padding.bottom + 12, top: 6),
           child: Container(
             decoration: BoxDecoration(
               color: _surface,
               borderRadius: BorderRadius.circular(28),
               border: Border.all(color: _line),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  blurRadius: 24,
-                  offset: const Offset(0, 6),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 24, offset: const Offset(0, 6))],
             ),
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                ...leftItems.map((e) => navItem(
-                  e['icon'] as IconData,
-                  e['label'] as String,
-                  e['idx'] as int,
-                )),
-
-                // Centre : Bouton +
+                ...leftItems.map((e) => navItem(e['icon'] as IconData, e['label'] as String, e['idx'] as int)),
                 Expanded(
                   child: Center(
                     child: GestureDetector(
                       onTap: () => context.push(AppRoutes.createPost),
                       child: Container(
-                        width: 48,
-                        height: 48,
+                        width: 48, height: 48,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _neon,
-                          boxShadow: [
-                            BoxShadow(
-                              color: _neon.withValues(alpha: 0.5),
-                              blurRadius: 20,
-                              spreadRadius: 2,
-                            ),
-                          ],
+                          shape: BoxShape.circle, color: _neon,
+                          boxShadow: [BoxShadow(color: _neon.withOpacity(0.5), blurRadius: 20, spreadRadius: 2)],
                         ),
                         child: const Icon(Icons.add_rounded, color: _ink, size: 28),
                       ),
                     ),
                   ),
                 ),
-
-                ...rightItems.map((e) => navItem(
-                  e['icon'] as IconData,
-                  e['label'] as String,
-                  e['idx'] as int,
-                )),
+                ...rightItems.map((e) => navItem(e['icon'] as IconData, e['label'] as String, e['idx'] as int)),
               ],
             ),
           ),
@@ -452,8 +311,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       ],
     );
   }
-
-  // ─── Clans Placeholder ──────────────────────────────────────────────────────
 
   Widget _buildClansPlaceholder() {
     return Center(
@@ -464,50 +321,19 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           children: [
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: _card,
-                shape: BoxShape.circle,
-                border: Border.all(color: _line),
-              ),
+              decoration: BoxDecoration(color: _card, shape: BoxShape.circle, border: Border.all(color: _line)),
               child: const Icon(Icons.shield_outlined, color: _neon, size: 54),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Clans eForum',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: _txt,
-              ),
-            ),
+            const Text('Clans eForum', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _txt)),
             const SizedBox(height: 8),
-            const Text(
-              'Rejoins ou crée un clan pour dominer le terrain !',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: _mut,
-              ),
-            ),
+            const Text('Rejoins ou crée un clan pour dominer le terrain !', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: _mut)),
             const SizedBox(height: 6),
-            const Text(
-              '(Bientôt disponible)',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: _neon,
-              ),
-            ),
+            const Text('(Bientôt disponible)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _neon)),
           ],
         ),
       ),
     );
-  }
-
-  // ─── FAB ───────────────────────────────────────────────────────────────────
-
-  Widget _buildFAB(BuildContext context) {
-    return const SizedBox.shrink(); // Le bouton + est dans la bottom nav
   }
 }
 
@@ -525,7 +351,10 @@ class PostCard extends ConsumerStatefulWidget {
 
 class _PostCardState extends ConsumerState<PostCard> {
   bool _liked = false;
+  bool _initialLiked = false;
   bool _reposted = false;
+  bool _initialReposted = false;
+  bool _interactionsLoaded = false;
 
   @override
   void initState() {
@@ -533,14 +362,25 @@ class _PostCardState extends ConsumerState<PostCard> {
     _checkInteractions();
   }
 
+  @override
+  void didUpdateWidget(PostCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.postId != widget.post.postId) _checkInteractions();
+  }
+
   Future<void> _checkInteractions() async {
     final vm = ref.read(feedViewModelProvider.notifier);
     final liked = await vm.isLiked(widget.post.postId);
     final reposted = await vm.isReposted(widget.post.postId);
-    if (mounted) setState(() {
-      _liked = liked;
-      _reposted = reposted;
-    });
+    if (mounted) {
+      setState(() {
+        _liked = liked;
+        _initialLiked = liked;
+        _reposted = reposted;
+        _initialReposted = reposted;
+        _interactionsLoaded = true;
+      });
+    }
   }
 
   Future<void> _toggleLike() async {
@@ -553,35 +393,20 @@ class _PostCardState extends ConsumerState<PostCard> {
     showModalBottomSheet(
       context: context,
       backgroundColor: _surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       isScrollControlled: true,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        ),
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: Container(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Republier',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: _txt,
-                ),
-              ),
+              const Text('Republier', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _txt)),
               const SizedBox(height: 16),
               Container(
-                decoration: BoxDecoration(
-                  color: _card,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: _line),
-                ),
+                decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _line)),
                 child: TextField(
                   controller: commentController,
                   style: const TextStyle(color: _txt, fontSize: 14),
@@ -601,36 +426,17 @@ class _PostCardState extends ConsumerState<PostCard> {
                 child: ElevatedButton(
                   onPressed: () async {
                     Navigator.pop(ctx);
-                    final success = await ref
-                        .read(feedViewModelProvider.notifier)
-                        .repostPost(
-                          originalPostId: widget.post.postId,
-                          repostComment: commentController.text.trim().isEmpty
-                              ? null
-                              : commentController.text.trim(),
-                        );
+                    final success = await ref.read(feedViewModelProvider.notifier).repostPost(
+                      originalPostId: widget.post.postId,
+                      repostComment: commentController.text.trim().isEmpty ? null : commentController.text.trim(),
+                    );
                     if (success && mounted) {
                       setState(() => _reposted = true);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Post republié ✅'),
-                          backgroundColor: _card,
-                        ),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post republié ✅'), backgroundColor: _card));
                     }
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _neon,
-                    foregroundColor: _ink,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: const Text(
-                    'Republier',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-                  ),
+                  style: ElevatedButton.styleFrom(backgroundColor: _neon, foregroundColor: _ink, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
+                  child: const Text('Republier', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                 ),
               ),
             ],
@@ -644,21 +450,24 @@ class _PostCardState extends ConsumerState<PostCard> {
   Widget build(BuildContext context) {
     final post = widget.post;
 
+    final int likeDelta = _interactionsLoaded ? ((_liked ? 1 : 0) - (_initialLiked ? 1 : 0)) : 0;
+    final int displayLikes = (post.likesCount + likeDelta).clamp(0, 999999);
+    final int repostDelta = _interactionsLoaded ? ((_reposted ? 1 : 0) - (_initialReposted ? 1 : 0)) : 0;
+    final int displayReposts = (post.repostsCount + repostDelta).clamp(0, 999999);
+
+    // Profil auteur depuis Firestore
+    final author = ref.watch(userProfileProvider(post.authorId)).valueOrNull;
+
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _line)),
-      ),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _line))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Signature line verte — élément distinctif eForum
+          // Signature line verte
           Container(
             height: 1.5,
             decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [_neon, Colors.transparent],
-                stops: [0.0, 0.6],
-              ),
+              gradient: LinearGradient(colors: [_neon, Colors.transparent], stops: [0.0, 0.6]),
             ),
           ),
 
@@ -666,62 +475,48 @@ class _PostCardState extends ConsumerState<PostCard> {
           if (post.isRepost)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: Row(
-                children: const [
-                  Icon(Icons.repeat_rounded, size: 13, color: _mut),
-                  SizedBox(width: 5),
-                  Text(
-                    'a republié',
-                    style: TextStyle(fontSize: 12, color: _mut),
-                  ),
-                ],
-              ),
+              child: Row(children: [
+                const Icon(Icons.repeat_rounded, size: 13, color: _mut),
+                const SizedBox(width: 5),
+                Text('${author?.username ?? '...'} a republié', style: const TextStyle(fontSize: 12, color: _mut)),
+              ]),
             ),
 
-          // Badge annonce admin
+          // Badge annonce
           if (post.isAnnouncement)
             Container(
               margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: _clan.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: _clan.withOpacity(0.4)),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.campaign_rounded, size: 13, color: _clan),
-                  SizedBox(width: 5),
-                  Text(
-                    'Annonce officielle',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: _clan,
-                    ),
-                  ),
-                ],
-              ),
+              decoration: BoxDecoration(color: _clan.withOpacity(0.12), borderRadius: BorderRadius.circular(8), border: Border.all(color: _clan.withOpacity(0.4))),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.campaign_rounded, size: 13, color: _clan),
+                SizedBox(width: 5),
+                Text('Annonce officielle', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _clan)),
+              ]),
             ),
 
-          // Corps du post
+          // Corps
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Avatar
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: _neon.withOpacity(0.15),
-                    border: Border.all(color: _line),
-                  ),
-                  child: const Center(
-                    child: Icon(Icons.person_rounded, color: _neon, size: 22),
+                // Avatar cliquable
+                GestureDetector(
+                  onTap: () => context.push('/profile/${post.authorId}'),
+                  child: Container(
+                    width: 42, height: 42,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _neon.withOpacity(0.15),
+                      border: Border.all(color: _line),
+                      image: author?.photoURL != null
+                          ? DecorationImage(image: NetworkImage(author!.photoURL!), fit: BoxFit.cover)
+                          : null,
+                    ),
+                    child: author?.photoURL == null
+                        ? const Center(child: Icon(Icons.person_rounded, color: _neon, size: 22))
+                        : null,
                   ),
                 ),
 
@@ -732,63 +527,29 @@ class _PostCardState extends ConsumerState<PostCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header : username + temps
                       Row(
                         children: [
-                          const Text(
-                            'joueur',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: _txt,
+                          GestureDetector(
+                            onTap: () => context.push('/profile/${post.authorId}'),
+                            child: Text(
+                              author?.username ?? '...',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _txt),
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            timeago.format(post.createdAt.toDate(), locale: 'fr'),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: _mut,
-                            ),
-                          ),
+                          Text(timeago.format(post.createdAt.toDate(), locale: 'fr'), style: const TextStyle(fontSize: 12, color: _mut)),
                           const Spacer(),
-                          Icon(Icons.more_horiz_rounded,
-                              color: _mut, size: 20),
+                          const Icon(Icons.more_horiz_rounded, color: _mut, size: 20),
                         ],
                       ),
-
                       const SizedBox(height: 6),
-
-                      // Texte du post
-                      Text(
-                        post.content,
-                        style: const TextStyle(
-                          fontSize: 14.5,
-                          color: _txt,
-                          height: 1.5,
-                        ),
-                      ),
-
-                      // Commentaire repost
-                      if (post.isRepost &&
-                          post.repostComment != null &&
-                          post.repostComment!.isNotEmpty)
+                      Text(post.content, style: const TextStyle(fontSize: 14.5, color: _txt, height: 1.5)),
+                      if (post.isRepost && post.repostComment != null && post.repostComment!.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(top: 10),
                           padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _card,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: _line),
-                          ),
-                          child: Text(
-                            post.repostComment!,
-                            style: const TextStyle(
-                              fontSize: 13.5,
-                              color: _txt,
-                              height: 1.4,
-                            ),
-                          ),
+                          decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _line)),
+                          child: Text(post.repostComment!, style: const TextStyle(fontSize: 13.5, color: _txt, height: 1.4)),
                         ),
                     ],
                   ),
@@ -797,45 +558,23 @@ class _PostCardState extends ConsumerState<PostCard> {
             ),
           ),
 
-          // ── Actions (like, commentaire, repost) ───────────────────────────
+          // Actions
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
             child: Row(
               children: [
-                // Like
                 _ActionButton(
-                  icon: _liked
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  label: '${post.likesCount + (_liked ? 1 : 0)}',
+                  icon: _liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  label: '$displayLikes',
                   color: _liked ? const Color(0xFFFF5A7A) : _mut,
                   onTap: _toggleLike,
                 ),
-
                 const SizedBox(width: 20),
-
-                // Commentaire
-                _ActionButton(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  label: '${post.commentsCount}',
-                  color: _mut,
-                  onTap: () {},
-                ),
-
+                _ActionButton(icon: Icons.chat_bubble_outline_rounded, label: '${post.commentsCount}', color: _mut, onTap: () {}),
                 const SizedBox(width: 20),
-
-                // Repost
-                _ActionButton(
-                  icon: Icons.repeat_rounded,
-                  label: '${post.repostsCount + (_reposted ? 1 : 0)}',
-                  color: _reposted ? _build : _mut,
-                  onTap: _reposted ? null : _showRepostDialog,
-                ),
-
+                _ActionButton(icon: Icons.repeat_rounded, label: '$displayReposts', color: _reposted ? _build : _mut, onTap: _reposted ? null : _showRepostDialog),
                 const Spacer(),
-
-                // Partager
-                Icon(Icons.ios_share_rounded, color: _mut, size: 18),
+                const Icon(Icons.ios_share_rounded, color: _mut, size: 18),
               ],
             ),
           ),
@@ -856,61 +595,25 @@ class _HeaderIconButton extends StatelessWidget {
   final String? badge;
   final VoidCallback onTap;
 
-  const _HeaderIconButton({
-    required this.icon,
-    this.hasDot = false,
-    this.dotColor = _neon,
-    this.badge,
-    required this.onTap,
-  });
+  const _HeaderIconButton({required this.icon, this.hasDot = false, this.dotColor = _neon, this.badge, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 40,
-        height: 40,
+        width: 40, height: 40,
         child: Stack(
           children: [
-            Center(
-              child: Icon(icon, color: _txt, size: 22),
-            ),
+            Center(child: Icon(icon, color: _txt, size: 22)),
             if (hasDot)
-              Positioned(
-                right: 6,
-                top: 6,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: dotColor,
-                    border: Border.all(color: _ink, width: 1.5),
-                  ),
-                ),
-              ),
+              Positioned(right: 6, top: 6, child: Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor, border: Border.all(color: _ink, width: 1.5)))),
             if (badge != null)
-              Positioned(
-                right: 2,
-                top: 2,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: _neon,
-                    borderRadius: BorderRadius.circular(99),
-                    border: Border.all(color: _ink, width: 1.5),
-                  ),
-                  child: Text(
-                    badge!,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: _ink,
-                    ),
-                  ),
-                ),
-              ),
+              Positioned(right: 2, top: 2, child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(color: _neon, borderRadius: BorderRadius.circular(99), border: Border.all(color: _ink, width: 1.5)),
+                child: Text(badge!, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: _ink)),
+              )),
           ],
         ),
       ),
@@ -924,12 +627,7 @@ class _ActionButton extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
 
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.color,
-    this.onTap,
-  });
+  const _ActionButton({required this.icon, required this.label, required this.color, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -939,14 +637,7 @@ class _ActionButton extends StatelessWidget {
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
     );
@@ -962,30 +653,11 @@ class _EmptyFeed extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _neon.withOpacity(0.08),
-            ),
-            child: const Icon(Icons.dynamic_feed_rounded,
-                color: _neon, size: 30),
-          ),
+          Container(width: 64, height: 64, decoration: BoxDecoration(shape: BoxShape.circle, color: _neon.withOpacity(0.08)), child: const Icon(Icons.dynamic_feed_rounded, color: _neon, size: 30)),
           const SizedBox(height: 16),
-          const Text(
-            'Aucun post pour l\'instant',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: _txt,
-            ),
-          ),
+          const Text('Aucun post pour l\'instant', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _txt)),
           const SizedBox(height: 8),
-          const Text(
-            'Sois le premier à publier quelque chose !',
-            style: TextStyle(fontSize: 13, color: _mut),
-          ),
+          const Text('Sois le premier à publier quelque chose !', style: TextStyle(fontSize: 13, color: _mut)),
         ],
       ),
     );
@@ -1001,50 +673,19 @@ class _EmptyFollowing extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _neon.withOpacity(0.08),
-            ),
-            child: const Icon(Icons.people_outline_rounded,
-                color: _neon, size: 30),
-          ),
+          Container(width: 64, height: 64, decoration: BoxDecoration(shape: BoxShape.circle, color: _neon.withOpacity(0.08)), child: const Icon(Icons.people_outline_rounded, color: _neon, size: 30)),
           const SizedBox(height: 16),
-          const Text(
-            'Aucun post encore',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: _txt,
-            ),
-          ),
+          const Text('Aucun post encore', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _txt)),
           const SizedBox(height: 8),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 48),
-            child: Text(
-              'Tu ne suis personne pour l\'instant.\nAbonne-toi à des joueurs pour voir leurs posts ici.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: _mut, height: 1.5),
-            ),
+            child: Text('Tu ne suis personne pour l\'instant.\nAbonne-toi à des joueurs pour voir leurs posts ici.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: _mut, height: 1.5)),
           ),
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              color: _neon.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _neon.withOpacity(0.3)),
-            ),
-            child: const Text(
-              'Découvrir des joueurs',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: _neon,
-              ),
-            ),
+            decoration: BoxDecoration(color: _neon.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: _neon.withOpacity(0.3))),
+            child: const Text('Découvrir des joueurs', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _neon)),
           ),
         ],
       ),

@@ -18,6 +18,7 @@ class UserModel {
   final UserRole   role;
   final UserStatus status;
   final Timestamp  createdAt;
+  final bool onboardingCompleted;
 
   const UserModel({
     required this.uid,
@@ -33,6 +34,7 @@ class UserModel {
     this.clanId,
     this.role   = UserRole.user,
     this.status = UserStatus.active,
+    this.onboardingCompleted = false,
     required this.createdAt,
   });
 
@@ -55,6 +57,7 @@ class UserModel {
       status: UserStatus.values.firstWhere(
                 (e) => e.name == d['status'], orElse: () => UserStatus.active),
       createdAt: d['createdAt'] ?? Timestamp.now(),
+      onboardingCompleted: d['onboardingCompleted'] ?? false,
     );
   }
 
@@ -72,6 +75,7 @@ class UserModel {
     'role':            role.name,
     'status':          status.name,
     'createdAt':       createdAt,
+    'onboardingCompleted': onboardingCompleted,
   };
 
   UserModel copyWith({
@@ -79,6 +83,7 @@ class UserModel {
     String? favPlayerName, String? favPlayerCardURL, String? bio,
     int? followersCount, int? followingCount, String? clanId,
     UserRole? role, UserStatus? status,
+    bool? onboardingCompleted,
   }) => UserModel(
     uid: uid, email: email, createdAt: createdAt,
     username:        username        ?? this.username,
@@ -92,5 +97,6 @@ class UserModel {
     clanId:          clanId          ?? this.clanId,
     role:            role            ?? this.role,
     status:          status          ?? this.status,
+    onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
   );
 }

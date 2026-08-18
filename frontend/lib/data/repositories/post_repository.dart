@@ -133,27 +133,26 @@ class PostRepository {
     required String userId,
   }) async {
     try {
-      final likeRef = _posts
-          .doc(postId)
-          .collection(FirebaseConstants.likes)
-          .doc(userId);
+      final postRef = _posts.doc(postId);
+      final likeRef = postRef.collection(FirebaseConstants.likes).doc(userId);
 
-      final likeDoc = await likeRef.get();
-      final batch = _firestore.batch();
+      await _firestore.runTransaction((transaction) async {
+        final likeDoc = await transaction.get(likeRef);
 
-      if (likeDoc.exists) {
-        batch.delete(likeRef);
-        batch.update(_posts.doc(postId), {
-          'likesCount': FieldValue.increment(-1),
-        });
-      } else {
-        batch.set(likeRef, {'likedAt': FieldValue.serverTimestamp()});
-        batch.update(_posts.doc(postId), {
-          'likesCount': FieldValue.increment(1),
-        });
-      }
-
-      await batch.commit();
+        if (likeDoc.exists) {
+          transaction.delete(likeRef);
+          transaction.update(postRef, {
+            'likesCount': FieldValue.increment(-1),
+          });
+        } else {
+          transaction.set(likeRef, {
+            'likedAt': FieldValue.serverTimestamp(),
+          });
+          transaction.update(postRef, {
+            'likesCount': FieldValue.increment(1),
+          });
+        }
+      });
     } catch (e) {
       throw FirestoreException('Impossible de liker le post : $e');
     }

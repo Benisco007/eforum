@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/router/app_router.dart';
 import '../../widgets/common/grid_background.dart';
-
+import '../../viewmodels/auth_viewmodel.dart';
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -248,10 +248,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             'username': _username,
             'photoURL': photoURL,
             'favPlayerName': _favPlayerName,
+            'onboardingCompleted': true,
             'updatedAt': Timestamp.now(),
           });
 
       // 3. Naviguer vers le feed
+      await ref.read(authViewModelProvider.notifier).refreshUser();
       if (mounted) {
         context.go(AppRoutes.feed);
       }

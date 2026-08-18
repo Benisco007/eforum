@@ -10,6 +10,11 @@ import '../../views/feed/feed_screen.dart';
 import '../../views/feed/create_post_screen.dart';
 import '../../views/profile/profile_screen.dart';
 import '../../views/search/search_screen.dart';
+import '../../views/notifications/notifications_screen.dart';
+import '../../views/clans/clan_screen.dart';
+import '../../views/chat/chat_screen.dart';
+import '../../views/admin/admin_screen.dart';
+import '../../data/models/user_model.dart';
 
 // ─── Noms des routes ──────────────────────────────────────────────────────────
 
@@ -22,6 +27,10 @@ class AppRoutes {
   static const createPost = '/create-post';
   static const profile = '/profile';
   static const search = '/search';
+  static const notifications = '/notifications';
+  static const clans = '/clans'; 
+  static const messages = '/messages';
+  static const admin = '/admin';
 }
 
 // ─── RouterNotifier ───────────────────────────────────────────────────────────
@@ -69,14 +78,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           state.matchedLocation == AppRoutes.splash;
 
       final isOnboarding = state.matchedLocation == AppRoutes.onboarding;
+      final isAdmin      = state.matchedLocation == AppRoutes.admin;
 
-      // Si l'utilisateur vient de s'inscrire ou est connecté sur un écran d'auth → onboarding
       if (isAuthenticated && onAuthScreen) {
+        final user = (authState as AuthAuthenticated).user;
+
+        // Admin → panneau admin
+        if (user.role == UserRole.admin) return AppRoutes.admin;
+
+        // Onboarding déjà complété → feed
+        if (user.onboardingCompleted) return AppRoutes.feed;
+
+        // Premier login → onboarding
         return AppRoutes.onboarding;
       }
 
       // Non connecté et hors d'un écran auth → login
-      if (!isAuthenticated && !onAuthScreen && !isOnboarding) {
+      if (!isAuthenticated && !onAuthScreen && !isOnboarding && !isAdmin) {
         return AppRoutes.login;
       }
 
@@ -112,8 +130,44 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ProfileScreen(),
       ),
       GoRoute(
+        path: '/profile/:uid',
+        builder: (context, state) {
+          final uid = state.pathParameters['uid']!;
+          return ProfileScreen(uid: uid, showBackButton: true);
+        },
+      ),
+      GoRoute(
+        path: '/messages/:convId',
+        builder: (context, state) {
+          final convId       = state.pathParameters['convId']!;
+          final otherUserId  = state.uri.queryParameters['otherUserId'] ?? '';
+          final otherUsername= state.uri.queryParameters['otherUsername'] ?? '';
+          return ChatScreen(
+            conversationId: convId,
+            otherUserId:    otherUserId,
+            otherUsername:  otherUsername,
+          );
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.messages,
+        builder: (context, state) => const MessagesScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.search,
         builder: (context, state) => const SearchScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.notifications,
+        builder: (context, state) => const NotificationsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.clans,
+        builder: (context, state) => const ClansScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.admin,
+        builder: (context, state) => const AdminScreen(),
       ),
     ],
     errorBuilder: (context, state) => const Scaffold(

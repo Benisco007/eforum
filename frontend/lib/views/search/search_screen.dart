@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
+import 'package:go_router/go_router.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/user_repository.dart';
 
@@ -369,85 +370,88 @@ class _TrendingChip extends StatelessWidget {
   }
 }
 
-class _UserResultCard extends StatelessWidget {
+class _UserResultCard extends ConsumerWidget {
   final UserModel user;
   const _UserResultCard({required this.user});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
-      child: Row(
-        children: [
-          // Avatar
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _neon.withOpacity(0.12),
-              border: Border.all(color: _line),
-              image: user.photoURL != null
-                  ? DecorationImage(
-                      image: NetworkImage(user.photoURL!),
-                      fit: BoxFit.cover,
+  Widget build(BuildContext context, WidgetRef ref) {
+    return GestureDetector(
+      onTap: () => context.push('/profile/${user.uid}'),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: _card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _line),
+        ),
+        child: Row(
+          children: [
+            // Avatar
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: _neon.withOpacity(0.12),
+                border: Border.all(color: _line),
+                image: user.photoURL != null
+                    ? DecorationImage(
+                        image: NetworkImage(user.photoURL!),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+              ),
+              child: user.photoURL == null
+                  ? const Center(
+                      child: Icon(Icons.person_rounded, color: _neon, size: 22),
                     )
                   : null,
             ),
-            child: user.photoURL == null
-                ? const Center(
-                    child: Icon(Icons.person_rounded, color: _neon, size: 22),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
 
-          // Infos
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  user.username,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _txt,
+            // Infos
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.username,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _txt,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '@${user.username} · ${user.followersCount} abonnés',
-                  style: const TextStyle(fontSize: 12.5, color: _mut),
-                ),
-              ],
-            ),
-          ),
-
-          // Bouton suivre
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: _neon.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _neon.withOpacity(0.3)),
-            ),
-            child: const Text(
-              'Suivre',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: _neon,
+                  const SizedBox(height: 2),
+                  Text(
+                    '@${user.username} · ${user.followersCount} abonnés',
+                    style: const TextStyle(fontSize: 12.5, color: _mut),
+                  ),
+                ],
               ),
             ),
-          ),
-        ],
+
+            // Bouton voir profil
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: _neon.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _neon.withOpacity(0.3)),
+              ),
+              child: const Text(
+                'Voir profil',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: _neon,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

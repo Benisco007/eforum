@@ -34,6 +34,7 @@ dependencies:
   uuid: ^4.5.0
   intl: ^0.19.0
   crypto: ^3.0.5 # Pour le hash du conversationId
+  shared_preferences: ^2.5.5
 
 dev_dependencies:
   flutter_test:
@@ -47,3 +48,5 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+
+shared_preferences: ^2.3.2

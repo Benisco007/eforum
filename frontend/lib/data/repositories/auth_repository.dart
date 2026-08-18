@@ -85,12 +85,21 @@ class AuthRepository {
     return doc.exists ? UserModel.fromFirestore(doc) : null;
   }
 
+  Future<void> resetPassword({required String email}) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapFirebaseError(e.code), code: e.code);
+    }
+  }
+
   // Traduction des erreurs Firebase
   String _mapFirebaseError(String code) => switch (code) {
     'email-already-in-use'  => 'Cet email est déjà utilisé.',
     'weak-password'         => 'Mot de passe trop faible (6 caractères min).',
     'user-not-found'        => 'Aucun compte avec cet email.',
     'wrong-password'        => 'Mot de passe incorrect.',
+    'invalid-credential'    => 'Email ou mot de passe incorrect.',
     'invalid-email'         => 'Email invalide.',
     'too-many-requests'     => 'Trop de tentatives. Réessaie plus tard.',
     _                       => 'Une erreur est survenue. Réessaie.',

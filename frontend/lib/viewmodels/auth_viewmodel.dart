@@ -92,10 +92,28 @@ class AuthViewModel extends StateNotifier<AuthState> {
     }
   }
 
-  /// Réinitialise l'erreur (utile pour effacer le message après affichage)
+  /// Réinitialise l'erreur sans changer l'état d'auth
   void clearError() {
     if (state is AuthError) {
       state = AuthUnauthenticated();
+    }
+  }
+
+  /// Rafraîchit le UserModel depuis Firestore (après onboarding par ex.)
+  Future<void> refreshUser() async {
+    try {
+      final user = await _repository.getCurrentUser();
+      if (user != null) state = AuthAuthenticated(user);
+    } catch (_) {}
+  }
+
+  /// Envoi d'un email de réinitialisation du mot de passe
+  Future<String?> resetPassword(String email) async {
+    try {
+      await _repository.resetPassword(email: email);
+      return null; // null = succès
+    } catch (e) {
+      return e.toString();
     }
   }
 }

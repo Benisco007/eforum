@@ -312,7 +312,7 @@ class _ClansScreenState extends ConsumerState<ClansScreen>
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: _neon.withOpacity(0.25)),
             ),
-            overflow: Overflow.clip,
+            clipBehavior: Clip.hardEdge,
             child: Column(
               children: [
                 // Bannière
