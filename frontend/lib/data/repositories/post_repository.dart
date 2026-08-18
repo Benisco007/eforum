@@ -192,6 +192,7 @@ class PostRepository {
     required String postId,
     required String authorId,
     required String content,
+    String? parentCommentId,
   }) async {
     try {
       final commentRef = _posts
@@ -207,6 +208,7 @@ class PostRepository {
         'content': content,
         'likesCount': 0,
         'createdAt': FieldValue.serverTimestamp(),
+        'parentCommentId': parentCommentId,
       });
       batch.update(_posts.doc(postId), {
         'commentsCount': FieldValue.increment(1),

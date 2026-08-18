@@ -10,6 +10,7 @@ import '../../core/router/app_router.dart';
 import '../profile/profile_screen.dart';
 import '../search/search_screen.dart';
 import '../../data/repositories/user_repository.dart';
+import 'comments_screen.dart';
 
 const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
@@ -570,7 +571,17 @@ class _PostCardState extends ConsumerState<PostCard> {
                   onTap: _toggleLike,
                 ),
                 const SizedBox(width: 20),
-                _ActionButton(icon: Icons.chat_bubble_outline_rounded, label: '${post.commentsCount}', color: _mut, onTap: () {}),
+                _ActionButton(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  label: '${post.commentsCount}',
+                  color: _mut,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CommentsScreen(post: post),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 20),
                 _ActionButton(icon: Icons.repeat_rounded, label: '$displayReposts', color: _reposted ? _build : _mut, onTap: _reposted ? null : _showRepostDialog),
                 const Spacer(),

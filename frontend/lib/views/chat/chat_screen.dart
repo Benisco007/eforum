@@ -416,85 +416,83 @@ class _ConvCard extends StatelessWidget {
             const SizedBox(width: 12),
 
             // Infos
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FutureBuilder<DocumentSnapshot>(
-                          future: FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(otherUserId)
-                              .get(),
-                          builder: (context, snap) {
-                            final name = snap.hasData
-                                ? (snap.data!.data() as Map<String, dynamic>?)?['username'] ?? 'Joueur'
-                                : '...';
-                            return Text(
-                              name,
-                              style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: _txt),
-                              overflow: TextOverflow.ellipsis,
-                            );
-                          },
-                        ),
-                      ),
-                      if (date != null)
-                        Text(
-                          timeago.format(date, locale: 'fr'),
-                          style: const TextStyle(
-                              fontSize: 11.5, color: _mut),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          lastMessage,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: hasUnread
-                                ? _txt.withOpacity(0.9)
-                                : _mut,
-                            fontWeight: hasUnread
-                                ? FontWeight.w500
-                                : FontWeight.w400,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (unreadCount > 0)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _neon,
-                            borderRadius: BorderRadius.circular(99),
-                          ),
-                          child: Text(
-                            '$unreadCount',
+           Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(otherUserId)
+                            .get(),
+                        builder: (context, snap) {
+                          String name = '...';
+                          if (snap.hasData && snap.data!.exists) {
+                            final d = snap.data!.data() as Map<String, dynamic>?;
+                            name = d?['username'] as String? ?? 'Joueur';
+                          }
+                          return Text(
+                            name,
                             style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF05210F),
-                            ),
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: _txt),
+                            overflow: TextOverflow.ellipsis,
+                          );
+                        },
+                      ),
+                    ),
+                    if (date != null)
+                      Text(
+                        timeago.format(date, locale: 'fr'),
+                        style: const TextStyle(fontSize: 11.5, color: _mut),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        lastMessage,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: hasUnread ? _txt.withOpacity(0.9) : _mut,
+                          fontWeight: hasUnread ? FontWeight.w500 : FontWeight.w400,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (unreadCount > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _neon,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          '$unreadCount',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF05210F),
                           ),
                         ),
-                    ],
-                  ),
-                ],
-              ),
+                      ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
+    ),
+  );
   }
 }
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // CHAT SCREEN
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -614,75 +612,72 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   // ─── Header ────────────────────────────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      decoration: const BoxDecoration(
-        color: _ink,
-        border: Border(bottom: BorderSide(color: _line)),
-      ),
-      child:
-        const Text('@joueur', style: TextStyle(fontSize: 11.5, color: _mut)),
-          // Avatar
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _chat.withOpacity(0.15),
-              border: Border.all(color: _line),
-            ),
-            child: const Icon(Icons.person_rounded, color: _chat, size: 20),
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    decoration: const BoxDecoration(
+      color: _ink,
+      border: Border(bottom: BorderSide(color: _line)),
+    ),
+    child: Row(
+      children: [
+        // Retour
+        GestureDetector(
+          onTap: () => context.pop(),
+          child: const SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(Icons.chevron_left_rounded, color: _txt, size: 26),
           ),
+        ),
 
-          const SizedBox(width: 10),
+        // Avatar
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: _chat.withOpacity(0.15),
+            border: Border.all(color: _line),
+          ),
+          child: const Icon(Icons.person_rounded, color: _chat, size: 20),
+        ),
 
-          // Nom + statut
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.otherUsername,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: _txt,
-                  ),
+        const SizedBox(width: 10),
+
+        // Nom + handle
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                widget.otherUsername,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: _txt,
                 ),
-                Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: _neon,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'En ligne',
-                      style: TextStyle(fontSize: 11.5, color: _neon),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              ),
+              Text(
+                '@${widget.otherUsername}',
+                style: const TextStyle(fontSize: 11.5, color: _mut),
+              ),
+            ],
           ),
+        ),
 
-          // Actions
-          GestureDetector(
-            onTap: () {},
-            child: const SizedBox(
-              width: 40,
-              height: 40,
-              child: Icon(Icons.more_horiz_rounded, color: _mut, size: 22),
-            ),
+        // Menu
+        GestureDetector(
+          onTap: () {},
+          child: const SizedBox(
+            width: 40,
+            height: 40,
+            child: Icon(Icons.more_horiz_rounded, color: _mut, size: 22),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   // ─── Liste des messages ────────────────────────────────────────────────────
 

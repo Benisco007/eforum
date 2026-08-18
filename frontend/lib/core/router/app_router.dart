@@ -15,6 +15,7 @@ import '../../views/clans/clan_screen.dart';
 import '../../views/chat/chat_screen.dart';
 import '../../views/admin/admin_screen.dart';
 import '../../data/models/user_model.dart';
+import '../../views/profile/edit_profile_screen.dart';
 
 // ─── Noms des routes ──────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ class AppRoutes {
   static const clans = '/clans'; 
   static const messages = '/messages';
   static const admin = '/admin';
+  static const editProfile = '/edit-profile';
 }
 
 // ─── RouterNotifier ───────────────────────────────────────────────────────────
@@ -168,6 +170,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.admin,
         builder: (context, state) => const AdminScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.editProfile,
+        builder: (context, state) => const EditProfileScreen(),
       ),
     ],
     errorBuilder: (context, state) => const Scaffold(

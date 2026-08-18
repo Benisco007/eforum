@@ -7,6 +7,7 @@ import '../../viewmodels/feed_viewmodel.dart';
 import '../../data/models/user_model.dart';
 import '../../data/models/post_model.dart';
 import '../feed/feed_screen.dart' show PostCard;
+import '../../core/router/app_router.dart';
 
 // ─── Couleurs eForum ──────────────────────────────────────────────────────────
 
@@ -168,7 +169,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               icon: Icons.edit_outlined,
               label: 'Modifier le profil',
               color: _neon,
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                Future.delayed(const Duration(milliseconds: 300), () {
+                  if (mounted) context.push(AppRoutes.editProfile);
+                });
+              },
             ),
             const SizedBox(height: 10),
 
@@ -398,7 +404,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       children: [
                         _OutlineButton(
                           label: 'Modifier le profil',
-                          onTap: () {},
+                          onTap: () => context.push(AppRoutes.editProfile),
                         ),
                         const SizedBox(width: 8),
                         Container(
