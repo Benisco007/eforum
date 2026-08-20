@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/models/user_model.dart';
+import '../core/services/notification_service.dart';
 
 // ─── États possibles de l'authentification ───────────────────────────────────
 
@@ -59,6 +60,7 @@ class AuthViewModel extends StateNotifier<AuthState> {
         password: password,
       );
       state = AuthAuthenticated(user);
+      NotificationService().saveTokenToFirestore(user.uid);
     } catch (e) {
       state = AuthError(e.toString());
     }
@@ -76,6 +78,7 @@ class AuthViewModel extends StateNotifier<AuthState> {
         password: password,
       );
       state = AuthAuthenticated(user);
+      NotificationService().saveTokenToFirestore(user.uid);
     } catch (e) {
       state = AuthError(e.toString());
     }
@@ -86,6 +89,10 @@ class AuthViewModel extends StateNotifier<AuthState> {
     state = AuthLoading();
     try {
       await _repository.logout();
+      if (state is AuthAuthenticated) {
+        final uid = (state as AuthAuthenticated).user.uid;
+        await NotificationService().deleteToken(uid);
+      }
       state = AuthUnauthenticated();
     } catch (e) {
       state = AuthError(e.toString());

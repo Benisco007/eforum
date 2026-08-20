@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import '../../core/services/storage_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -227,18 +227,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
     try {
       // 1. Upload photo si sélectionnée (seulement si Storage activé)
-      String? photoURL;
-      if (_selectedImage != null) {
-        try {
-          final ref = FirebaseStorage.instance
-              .ref('avatars/${currentUser.uid}.jpg');
-          await ref.putFile(_selectedImage!);
-          photoURL = await ref.getDownloadURL();
-        } catch (e) {
-          // Storage non activé — continuer sans photo
-          photoURL = null;
-        }
-      }
+            String? photoURL;
+            if (_selectedImage != null) {
+              photoURL = await StorageService().uploadAvatar(
+                currentUser.uid,
+                _selectedImage!,
+              );
+            }
 
       // 2. Mettre à jour le document users/{uid} dans Firestore
       await FirebaseFirestore.instance

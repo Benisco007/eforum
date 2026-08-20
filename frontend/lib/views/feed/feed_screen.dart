@@ -11,6 +11,8 @@ import '../profile/profile_screen.dart';
 import '../search/search_screen.dart';
 import '../../data/repositories/user_repository.dart';
 import 'comments_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../builds/builds_screen.dart';
 
 const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
@@ -37,6 +39,17 @@ final userProfileProvider =
     FutureProvider.family<UserModel?, String>((ref, uid) async {
   final repo = UserRepository();
   return repo.getUserById(uid);
+});
+final unreadNotificationsProvider = StreamProvider<int>((ref) {
+  final currentUser = ref.watch(currentUserProvider);
+  if (currentUser == null) return Stream.value(0);
+
+  return FirebaseFirestore.instance
+      .collection('notifications')
+      .where('recipientId', isEqualTo: currentUser.uid)
+      .where('read', isEqualTo: false)
+      .snapshots()
+      .map((snap) => snap.docs.length);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -101,7 +114,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
             ],
           ),
           const SearchScreen(),
-          const SizedBox.expand(),
+          const SizedBox.shrink(),
           _buildClansPlaceholder(),
           const ProfileScreen(showBackButton: false),
         ],
@@ -135,7 +148,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
           const Spacer(),
           _HeaderIconButton(icon: Icons.chat_bubble_outline_rounded, hasDot: true, dotColor: _chat, onTap: () => context.push(AppRoutes.messages)),
-          _HeaderIconButton(icon: Icons.notifications_none_rounded, badge: '3', onTap: () => context.push(AppRoutes.notifications)),
+          Consumer(
+            builder: (context, ref, _) {
+              final count = ref.watch(unreadNotificationsProvider).valueOrNull ?? 0;
+              return _HeaderIconButton(
+                icon: Icons.notifications_none_rounded,
+                badge: count > 0 ? '$count' : null,
+                onTap: () => context.push(AppRoutes.notifications),
+              );
+            },
+          ),
         ],
       ),
     );

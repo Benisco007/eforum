@@ -8,6 +8,9 @@ import '../../data/models/user_model.dart';
 import '../../data/models/post_model.dart';
 import '../feed/feed_screen.dart' show PostCard;
 import '../../core/router/app_router.dart';
+import '../../data/models/build_model.dart';
+import '../../data/repositories/build_repository.dart';
+import '../builds/builds_screen.dart' show BuildCard, CreateBuildSheet;
 
 // ─── Couleurs eForum ──────────────────────────────────────────────────────────
 
@@ -380,7 +383,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                           color: _neon.withOpacity(0.15),
                           image: user.photoURL != null
                               ? DecorationImage(
-                                  image: NetworkImage(user.photoURL!),
+                                  image: NetworkImage('${user.photoURL!}?t=${DateTime.now().millisecondsSinceEpoch}'),
                                   fit: BoxFit.cover,
                                 )
                               : null,
@@ -655,52 +658,67 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   // ─── Onglet Builds ─────────────────────────────────────────────────────────
-
   Widget _buildBuildsTab() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _build.withOpacity(0.08),
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser == null) return const SizedBox.shrink();
+
+    return StreamBuilder<List<BuildModel>>(
+      stream: BuildRepository().getUserBuilds(currentUser.uid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: _build, strokeWidth: 2));
+        }
+        final builds = snapshot.data ?? [];
+        if (builds.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 60, height: 60,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _build.withOpacity(0.08),
+                  ),
+                  child: const Icon(Icons.bolt_outlined, color: _build, size: 28),
+                ),
+                const SizedBox(height: 14),
+                const Text('Aucun build encore',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _txt)),
+                const SizedBox(height: 6),
+                const Text('Crée et partage tes configurations !',
+                    style: TextStyle(fontSize: 13, color: _mut)),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: () => showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => const CreateBuildSheet(),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _build.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _build.withOpacity(0.3)),
+                    ),
+                    child: const Text('+ Créer un build',
+                        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: _build)),
+                  ),
+                ),
+              ],
             ),
-            child: const Icon(Icons.bolt_outlined, color: _build, size: 28),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Aucun build encore',
-            style: TextStyle(
-                fontSize: 15, fontWeight: FontWeight.w700, color: _txt),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Crée et partage tes configurations !',
-            style: TextStyle(fontSize: 13, color: _mut),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              color: _build.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: _build.withOpacity(0.3)),
-            ),
-            child: const Text(
-              '+ Créer un build',
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: _build,
-              ),
-            ),
-          ),
-        ],
-      ),
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: builds.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (_, i) => BuildCard(build: builds[i], showDelete: true),
+        );
+      },
     );
   }
 
@@ -1250,7 +1268,7 @@ class _OtherProfileScreenState
                           border: Border.all(color: _neon, width: 2),
                           image: user.photoURL != null
                               ? DecorationImage(
-                                  image: NetworkImage(user.photoURL!),
+                                  image: NetworkImage('${user.photoURL!}?t=${DateTime.now().millisecondsSinceEpoch}'),
                                   fit: BoxFit.cover,
                                 )
                               : null,

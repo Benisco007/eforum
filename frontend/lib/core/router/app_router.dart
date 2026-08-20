@@ -16,6 +16,7 @@ import '../../views/chat/chat_screen.dart';
 import '../../views/admin/admin_screen.dart';
 import '../../data/models/user_model.dart';
 import '../../views/profile/edit_profile_screen.dart';
+import '../../views/builds/builds_screen.dart';
 
 // ─── Noms des routes ──────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ class AppRoutes {
   static const messages = '/messages';
   static const admin = '/admin';
   static const editProfile = '/edit-profile';
+  static const builds = '/builds';
 }
 
 // ─── RouterNotifier ───────────────────────────────────────────────────────────
@@ -174,6 +176,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.editProfile,
         builder: (context, state) => const EditProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.builds,
+        builder: (context, state) => const BuildsScreen(),
       ),
     ],
     errorBuilder: (context, state) => const Scaffold(
