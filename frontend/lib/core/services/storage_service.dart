@@ -28,6 +28,20 @@ class StorageService {
             return null;
         }
         }
+
+        Future<String?> uploadTeamPhoto(String uid, File file) async {
+          try {
+            final path = '${uid}_banner.jpg';
+            try { await _supabase.storage.from('avatars').remove([path]); } catch (_) {}
+            await _supabase.storage
+                .from('avatars')
+                .upload(path, file, fileOptions: const FileOptions(upsert: true));
+            return _supabase.storage.from('avatars').getPublicUrl(path).trim();
+          } catch (e) {
+            print('Banner upload error: $e');
+            return null;
+          }
+        }
   // ─── Upload image post ─────────────────────────────────────────────────────
 
   Future<String?> uploadPostImage(String postId, File file) async {

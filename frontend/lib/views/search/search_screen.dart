@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../data/models/user_model.dart';
+import '../../data/models/clan_model.dart';
 import '../../data/repositories/user_repository.dart';
-
-// ─── Couleurs eForum ──────────────────────────────────────────────────────────
+import '../../core/constants/firebase_constants.dart';
+import '../../viewmodels/auth_viewmodel.dart';
+import '../clans/clan_screen.dart' show ClanDetailScreen;
 
 const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
@@ -18,21 +21,37 @@ const _clan    = Color(0xFFFFCC02);
 const _build   = Color(0xFFCE93D8);
 const _chat    = Color(0xFFFF8A65);
 
-// ─── Tendances mock ───────────────────────────────────────────────────────────
-
-const _trending = [
-  '#RamadanCup', '#MetaJanvier', '#TerangaFC',
-  '#BuildGardien', '#GPFree', '#Div1',
-  '#eFootball', '#BestBuild',
+const _palette = [
+  Color(0xFF00E676), Color(0xFFFFCC02), Color(0xFFCE93D8),
+  Color(0xFFFF8A65), Color(0xFF4FC3F7), Color(0xFFEF5350), Color(0xFF66BB6A),
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SEARCH SCREEN
-// ═══════════════════════════════════════════════════════════════════════════════
+Color _colorFor(String id) {
+  final index = id.codeUnits.fold(0, (a, b) => a + b) % _palette.length;
+  return _palette[index];
+}
+
+final topUsersProvider = FutureProvider<List<UserModel>>((ref) async {
+  final snap = await FirebaseFirestore.instance
+      .collection(FirebaseConstants.users)
+      .orderBy("followersCount", descending: true)
+      .limit(10)
+      .get();
+  return snap.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
+});
+
+final topClansProvider = FutureProvider<List<ClanModel>>((ref) async {
+  final snap = await FirebaseFirestore.instance
+      .collection(FirebaseConstants.clans)
+      .where("status", isEqualTo: "active")
+      .orderBy("membersCount", descending: true)
+      .limit(8)
+      .get();
+  return snap.docs.map((doc) => ClanModel.fromFirestore(doc)).toList();
+});
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
-
   @override
   ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
@@ -42,8 +61,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
   late TabController _tabController;
-
   List<UserModel> _userResults = [];
+  List<ClanModel> _clanResults = [];
   bool _isSearching = false;
   bool _hasQuery = false;
   Timer? _debounce;
@@ -51,7 +70,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _searchController.addListener(_onSearchChanged);
   }
 
@@ -67,25 +86,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   void _onSearchChanged() {
     final query = _searchController.text.trim();
     setState(() => _hasQuery = query.isNotEmpty);
-
     _debounce?.cancel();
     if (query.isEmpty) {
-      setState(() {
-        _userResults = [];
-        _isSearching = false;
-      });
+      setState(() { _userResults = []; _clanResults = []; _isSearching = false; });
       return;
     }
-
     _debounce = Timer(const Duration(milliseconds: 400), () => _search(query));
   }
 
   Future<void> _search(String query) async {
     setState(() => _isSearching = true);
     try {
-      final repo = UserRepository();
-      final users = await repo.searchUsers(query);
-      if (mounted) setState(() => _userResults = users);
+      final users = await UserRepository().searchUsers(query);
+      final clanSnap = await FirebaseFirestore.instance
+          .collection(FirebaseConstants.clans)
+          .where("status", isEqualTo: "active")
+          .where("name", isGreaterThanOrEqualTo: query)
+          .where("name", isLessThanOrEqualTo: "${query}\uf8ff")
+          .limit(10)
+          .get();
+      final clans = clanSnap.docs.map((d) => ClanModel.fromFirestore(d)).toList();
+      if (mounted) setState(() { _userResults = users; _clanResults = clans; });
     } catch (_) {
     } finally {
       if (mounted) setState(() => _isSearching = false);
@@ -94,10 +115,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   void _clearSearch() {
     _searchController.clear();
-    setState(() {
-      _userResults = [];
-      _hasQuery = false;
-    });
+    setState(() { _userResults = []; _clanResults = []; _hasQuery = false; });
   }
 
   @override
@@ -107,501 +125,319 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       body: Column(
         children: [
           SizedBox(height: MediaQuery.of(context).padding.top),
-
-          // ── Header ────────────────────────────────────────────────────────
           _buildHeader(),
-
-          // ── Tabs filtre ───────────────────────────────────────────────────
           if (_hasQuery) _buildFilterTabs(),
-
-          // ── Contenu ───────────────────────────────────────────────────────
-          Expanded(
-            child: _hasQuery ? _buildResults() : _buildDiscover(),
-          ),
+          Expanded(child: _hasQuery ? _buildResults() : _buildDiscover()),
         ],
       ),
     );
   }
-
-  // ─── Header avec barre de recherche ────────────────────────────────────────
 
   Widget _buildHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      decoration: const BoxDecoration(
-        color: _ink,
-        border: Border(bottom: BorderSide(color: _line)),
-      ),
-      child: Row(
-        children: [
-          // Barre de recherche
-          Expanded(
-            child: Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: _card,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _line),
-              ),
-              child: Row(
-                children: [
-                  const SizedBox(width: 12),
-                  const Icon(Icons.search_rounded, color: _neon, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      focusNode: _focusNode,
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        color: _txt,
-                      ),
-                      decoration: const InputDecoration(
-                        hintText: 'Joueurs, builds, clans...',
-                        hintStyle: TextStyle(color: _mut, fontSize: 14.5),
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.zero,
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  if (_hasQuery)
-                    GestureDetector(
-                      onTap: _clearSearch,
-                      child: const Padding(
-                        padding: EdgeInsets.all(10),
-                        child: Icon(Icons.close_rounded, color: _mut, size: 18),
-                      ),
-                    ),
-                ],
+      decoration: const BoxDecoration(color: _ink, border: Border(bottom: BorderSide(color: _line))),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(14), border: Border.all(color: _line)),
+        child: Row(
+          children: [
+            const SizedBox(width: 12),
+            const Icon(Icons.search_rounded, color: _neon, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _searchController,
+                focusNode: _focusNode,
+                style: const TextStyle(fontSize: 14.5, color: _txt),
+                decoration: const InputDecoration(
+                  hintText: "Joueurs, clans...",
+                  hintStyle: TextStyle(color: _mut, fontSize: 14.5),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.zero,
+                  isDense: true,
+                ),
               ),
             ),
-          ),
-
-          const SizedBox(width: 10),
-
-          // Bouton filtre
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: _line),
-            ),
-            child: const Icon(Icons.tune_rounded, color: _mut, size: 20),
-          ),
-        ],
+            if (_hasQuery)
+              GestureDetector(
+                onTap: _clearSearch,
+                child: const Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Icon(Icons.close_rounded, color: _mut, size: 18),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
-  // ─── Tabs filtre (Tout / Utilisateurs / Posts / Builds / Clans) ────────────
-
   Widget _buildFilterTabs() {
     return Container(
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: _line)),
-      ),
+      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _line))),
       child: TabBar(
         controller: _tabController,
         isScrollable: true,
         tabAlignment: TabAlignment.start,
         labelColor: _neon,
         unselectedLabelColor: _mut,
-        labelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
-        ),
+        labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
         indicatorColor: _neon,
         indicatorWeight: 2,
         indicatorSize: TabBarIndicatorSize.label,
         dividerColor: Colors.transparent,
-        tabs: const [
-          Tab(text: 'Tout'),
-          Tab(text: 'Utilisateurs'),
-          Tab(text: 'Posts'),
-          Tab(text: 'Builds'),
-          Tab(text: 'Clans'),
-        ],
+        tabs: const [Tab(text: "Tout"), Tab(text: "Utilisateurs"), Tab(text: "Clans")],
       ),
     );
   }
 
-  // ─── Résultats de recherche ─────────────────────────────────────────────────
-
   Widget _buildResults() {
-    if (_isSearching) {
+    if (_isSearching) return const Center(child: CircularProgressIndicator(color: _neon, strokeWidth: 2));
+    final hasUsers = _userResults.isNotEmpty;
+    final hasClans = _clanResults.isNotEmpty;
+    if (!hasUsers && !hasClans) {
       return const Center(
-        child: CircularProgressIndicator(color: _neon, strokeWidth: 2),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off_rounded, color: _mut, size: 40),
+            SizedBox(height: 12),
+            Text("Aucun resultat", style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _txt)),
+            SizedBox(height: 6),
+            Text("Essaie avec un autre terme.", style: TextStyle(fontSize: 13, color: _mut)),
+          ],
+        ),
       );
     }
-
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return TabBarView(
+      controller: _tabController,
       children: [
-        // Section utilisateurs
-        if (_userResults.isNotEmpty) ...[
-          _SectionTitle(label: 'Utilisateurs'),
-          ..._userResults.map((user) => _UserResultCard(user: user)),
-        ] else ...[
-          const SizedBox(height: 60),
-          const Center(
-            child: Column(
-              children: [
-                Icon(Icons.search_off_rounded, color: _mut, size: 40),
-                SizedBox(height: 12),
-                Text(
-                  'Aucun résultat',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: _txt,
-                  ),
-                ),
-                SizedBox(height: 6),
-                Text(
-                  'Essaie avec un autre terme.',
-                  style: TextStyle(fontSize: 13, color: _mut),
-                ),
-              ],
-            ),
-          ),
-        ],
+        ListView(padding: const EdgeInsets.symmetric(vertical: 8), children: [
+          if (hasUsers) ...[const _SectionTitle(label: "Utilisateurs"), ..._userResults.take(3).map((u) => _UserResultCard(user: u))],
+          if (hasClans) ...[const SizedBox(height: 8), const _SectionTitle(label: "Clans"), ..._clanResults.take(3).map((c) => _ClanResultCard(clan: c))],
+        ]),
+        ListView(padding: const EdgeInsets.symmetric(vertical: 8),
+          children: hasUsers ? _userResults.map((u) => _UserResultCard(user: u)).toList() : [const _EmptyTab(label: "Aucun utilisateur trouve")]),
+        ListView(padding: const EdgeInsets.symmetric(vertical: 8),
+          children: hasClans ? _clanResults.map((c) => _ClanResultCard(clan: c)).toList() : [const _EmptyTab(label: "Aucun clan trouve")]),
       ],
     );
   }
-
-  // ─── Page découverte (sans recherche active) ────────────────────────────────
 
   Widget _buildDiscover() {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Tendances
-        _SectionTitle(label: 'Tendances Afrique de l\'Ouest'),
+        const _SectionTitle(label: "Joueurs a decouvrir"),
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: _trending.map((tag) => _TrendingChip(tag: tag)).toList(),
-        ),
-
+        Consumer(builder: (context, ref, _) {
+          return ref.watch(topUsersProvider).when(
+            loading: () => const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: _neon, strokeWidth: 2))),
+            error: (e, _) => Text("Erreur : $e", style: const TextStyle(color: _mut)),
+            data: (users) => users.isEmpty
+                ? const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text("Aucun joueur pour l'instant.", style: TextStyle(color: _mut, fontSize: 13)))
+                : Column(children: users.map((u) => _UserDiscoverCard(user: u)).toList()),
+          );
+        }),
         const SizedBox(height: 28),
-
-        // Joueurs à suivre (mock)
-        _SectionTitle(label: 'Joueurs à découvrir'),
+        const _SectionTitle(label: "Clans populaires"),
         const SizedBox(height: 12),
-        ..._mockPlayers.map((p) => _MockPlayerCard(player: p)),
-
-        const SizedBox(height: 28),
-
-        // Clans populaires (mock)
-        _SectionTitle(label: 'Clans populaires'),
-        const SizedBox(height: 12),
-        ..._mockClans.map((c) => _MockClanCard(clan: c)),
+        Consumer(builder: (context, ref, _) {
+          return ref.watch(topClansProvider).when(
+            loading: () => const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator(color: _neon, strokeWidth: 2))),
+            error: (e, _) => Text("Erreur : $e", style: const TextStyle(color: _mut)),
+            data: (clans) => clans.isEmpty
+                ? const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Text("Aucun clan pour l'instant.", style: TextStyle(color: _mut, fontSize: 13)))
+                : Column(children: clans.map((c) => _ClanDiscoverCard(clan: c)).toList()),
+          );
+        }),
       ],
     );
   }
 }
 
-// ─── Données mock ─────────────────────────────────────────────────────────────
-
-const _mockPlayers = [
-  {'username': 'ibra_efc', 'bio': 'Div. 1 · Dakar 🇸🇳', 'color': 0xFF00E676},
-  {'username': 'awa_builds', 'bio': 'Créatrice de builds · Abidjan 🇨🇮', 'color': 0xFFCE93D8},
-  {'username': 'kouassi99', 'bio': 'Top 100 Afrique · Div. 1', 'color': 0xFFFF8A65},
-];
-
-const _mockClans = [
-  {'tag': 'TFC', 'name': 'Teranga FC 🇸🇳', 'members': '124', 'color': 0xFF00E676},
-  {'tag': 'LDM', 'name': 'Lions du Mandé 🇲🇱', 'members': '176', 'color': 0xFFFFCC02},
-  {'tag': 'EKS', 'name': 'Ekassa Squad 🇨🇮', 'members': '98', 'color': 0xFFCE93D8},
-];
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// WIDGETS UTILITAIRES
-// ═══════════════════════════════════════════════════════════════════════════════
-
 class _SectionTitle extends StatelessWidget {
   final String label;
   const _SectionTitle({required this.label});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+    child: Text(label.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _mut, letterSpacing: 2)),
+  );
+}
 
+class _EmptyTab extends StatelessWidget {
+  final String label;
+  const _EmptyTab({required this.label});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 60),
+    child: Center(child: Text(label, style: const TextStyle(color: _mut, fontSize: 13))),
+  );
+}
+
+class _Avatar extends StatelessWidget {
+  final String? photoURL;
+  final String name;
+  final double size;
+  const _Avatar({required this.photoURL, required this.name, required this.size});
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label.toUpperCase(),
-      style: const TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-        color: _mut,
-        letterSpacing: 2,
+    final color = _colorFor(name);
+    return Container(
+      width: size, height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withOpacity(0.12),
+        border: Border.all(color: _line),
+        image: photoURL != null ? DecorationImage(image: NetworkImage(photoURL!), fit: BoxFit.cover) : null,
       ),
+      child: photoURL == null ? Center(child: Icon(Icons.person_rounded, color: color, size: size * 0.5)) : null,
     );
   }
 }
 
-class _TrendingChip extends StatelessWidget {
-  final String tag;
-  const _TrendingChip({required this.tag});
-
+class _GreenPill extends StatelessWidget {
+  final String label;
+  const _GreenPill({required this.label});
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _line),
-      ),
-      child: Text(
-        tag,
-        style: const TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: _txt,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+    decoration: BoxDecoration(color: _neon.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: _neon.withOpacity(0.3))),
+    child: Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: _neon)),
+  );
+}
+
+class _ClanPill extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _ClanPill({required this.label, required this.color});
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+    decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.3))),
+    child: Text(label, style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color)),
+  );
 }
 
 class _UserResultCard extends ConsumerWidget {
   final UserModel user;
   const _UserResultCard({required this.user});
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => GestureDetector(
+    onTap: () => context.push('/profile/${user.uid}'),
+    child: Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(16), border: Border.all(color: _line)),
+      child: Row(children: [
+        _Avatar(photoURL: user.photoURL, name: user.username, size: 44),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(user.username, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _txt)),
+          const SizedBox(height: 2),
+          Text("@${user.username} . ${user.followersCount} abonnes", style: const TextStyle(fontSize: 12.5, color: _mut)),
+        ])),
+        const _GreenPill(label: "Voir profil"),
+      ]),
+    ),
+  );
+}
 
+class _UserDiscoverCard extends ConsumerWidget {
+  final UserModel user;
+  const _UserDiscoverCard({required this.user});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isSelf = ref.watch(currentUserProvider)?.uid == user.uid;
     return GestureDetector(
       onTap: () => context.push('/profile/${user.uid}'),
       child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(16), border: Border.all(color: _line)),
+        child: Row(children: [
+          _Avatar(photoURL: user.photoURL, name: user.username, size: 44),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(user.username, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _txt)),
+            const SizedBox(height: 2),
+            Text(
+              (user.bio?.isNotEmpty ?? false) ? user.bio! : "${user.followersCount} abonnes",
+              style: const TextStyle(fontSize: 12.5, color: _mut), maxLines: 1, overflow: TextOverflow.ellipsis,
+            ),
+          ])),
+          if (!isSelf) const _GreenPill(label: "Voir profil"),
+        ]),
+      ),
+    );
+  }
+}
+
+class _ClanResultCard extends StatelessWidget {
+  final ClanModel clan;
+  const _ClanResultCard({required this.clan});
+  @override
+  Widget build(BuildContext context) {
+    final color = _colorFor(clan.clanId);
+    final tag = clan.name.substring(0, clan.name.length > 3 ? 3 : clan.name.length).toUpperCase();
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ClanDetailScreen(clanId: clan.clanId))),
+      child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _line),
-        ),
-        child: Row(
-          children: [
-            // Avatar
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: _neon.withOpacity(0.12),
-                border: Border.all(color: _line),
-                image: user.photoURL != null
-                    ? DecorationImage(
-                        image: NetworkImage(user.photoURL!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-              ),
-              child: user.photoURL == null
-                  ? const Center(
-                      child: Icon(Icons.person_rounded, color: _neon, size: 22),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 12),
-
-            // Infos
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    user.username,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: _txt,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '@${user.username} · ${user.followersCount} abonnés',
-                    style: const TextStyle(fontSize: 12.5, color: _mut),
-                  ),
-                ],
-              ),
-            ),
-
-            // Bouton voir profil
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: _neon.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: _neon.withOpacity(0.3)),
-              ),
-              child: const Text(
-                'Voir profil',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: _neon,
-                ),
-              ),
-            ),
-          ],
-        ),
+        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(16), border: Border.all(color: _line)),
+        child: Row(children: [
+          Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
+            child: Center(child: Text(tag, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color))),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(clan.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _txt)),
+            const SizedBox(height: 2),
+            Text("${clan.membersCount} membres", style: const TextStyle(fontSize: 12.5, color: _mut)),
+          ])),
+          _ClanPill(label: "Voir", color: color),
+        ]),
       ),
     );
   }
 }
 
-class _MockPlayerCard extends StatelessWidget {
-  final Map<String, dynamic> player;
-  const _MockPlayerCard({required this.player});
-
+class _ClanDiscoverCard extends StatelessWidget {
+  final ClanModel clan;
+  const _ClanDiscoverCard({required this.clan});
   @override
   Widget build(BuildContext context) {
-    final color = Color(player['color'] as int);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
-      child: Row(
-        children: [
+    final color = _colorFor(clan.clanId);
+    final tag = clan.name.substring(0, clan.name.length > 3 ? 3 : clan.name.length).toUpperCase();
+    return GestureDetector(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ClanDetailScreen(clanId: clan.clanId))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(16), border: Border.all(color: _line)),
+        child: Row(children: [
           Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withOpacity(0.12),
-              border: Border.all(color: _line),
-            ),
-            child: Center(
-              child: Icon(Icons.person_rounded, color: color, size: 22),
-            ),
+            width: 44, height: 44,
+            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
+            child: Center(child: Text(tag, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color))),
           ),
           const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  player['username'] as String,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _txt,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  player['bio'] as String,
-                  style: const TextStyle(fontSize: 12.5, color: _mut),
-                ),
-              ],
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(clan.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _txt)),
+            const SizedBox(height: 2),
+            Text(
+              (clan.description?.isNotEmpty ?? false) ? clan.description! : "${clan.membersCount} membres",
+              style: const TextStyle(fontSize: 12.5, color: _mut), maxLines: 1, overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: _neon.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: _neon.withOpacity(0.3)),
-            ),
-            child: const Text(
-              'Suivre',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: _neon,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MockClanCard extends StatelessWidget {
-  final Map<String, dynamic> clan;
-  const _MockClanCard({required this.clan});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = Color(clan['color'] as int);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _line),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                clan['tag'] as String,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: color,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  clan['name'] as String,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _txt,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${clan['members']} membres',
-                  style: const TextStyle(fontSize: 12.5, color: _mut),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: color.withOpacity(0.3)),
-            ),
-            child: Text(
-              'Rejoindre',
-              style: TextStyle(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: color,
-              ),
-            ),
-          ),
-        ],
+          ])),
+          _ClanPill(label: "Rejoindre", color: color),
+        ]),
       ),
     );
   }

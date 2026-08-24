@@ -13,6 +13,7 @@ import '../../data/repositories/user_repository.dart';
 import 'comments_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../builds/builds_screen.dart';
+import '../clans/clan_screen.dart';
 
 const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
@@ -25,13 +26,6 @@ const _clan    = Color(0xFFFFCC02);
 const _build   = Color(0xFFCE93D8);
 const _chat    = Color(0xFFFF8A65);
 
-const _mockClans = [
-  {'tag': 'TFC', 'name': 'Teranga FC', 'color': 0xFF00E676},
-  {'tag': 'LDM', 'name': 'Lions Mandé', 'color': 0xFFFFCC02},
-  {'tag': 'EKS', 'name': 'Ekassa',      'color': 0xFFCE93D8},
-  {'tag': 'ABJ', 'name': 'Abidjan FC',  'color': 0xFFFF8A65},
-  {'tag': 'LAG', 'name': 'Lagos Boys',  'color': 0xFF4FC3F7},
-];
 
 // ─── Provider profil auteur ───────────────────────────────────────────────────
 
@@ -115,7 +109,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
           ),
           const SearchScreen(),
           const SizedBox.shrink(),
-          _buildClansPlaceholder(),
+          const ClansScreen(),
           const ProfileScreen(showBackButton: false),
         ],
       ),
@@ -194,7 +188,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
       },
       child: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(child: _buildClanStories()),
           if (feedState is FeedLoading)
             const SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: _neon, strokeWidth: 2)))
           else if (feedState is FeedError)
@@ -242,29 +235,6 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
     return _buildForYouTab(feedState);
   }
 
-  Widget _buildClanStories() {
-    return Container(
-      height: 72,
-      decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: _line))),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        itemCount: _mockClans.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final color = Color(_mockClans[index]['color'] as int);
-          return Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              color: color.withOpacity(0.18),
-              border: Border.all(color: color.withOpacity(0.5), width: 2),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   Widget _buildBottomNav(BuildContext context) {
     final leftItems = [
@@ -566,7 +536,31 @@ class _PostCardState extends ConsumerState<PostCard> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Text(post.content, style: const TextStyle(fontSize: 14.5, color: _txt, height: 1.5)),
+                      if (post.mediaURLs.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              post.mediaURLs.first,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, progress) {
+                                if (progress == null) return child;
+                                return Container(
+                                  height: 200,
+                                  decoration: BoxDecoration(
+                                    color: _card,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Center(
+                                    child: CircularProgressIndicator(color: _neon, strokeWidth: 2),
+                                  ),
+                                );
+                              },
+                              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                            ),
+                          ),
+                        ],
                       if (post.isRepost && post.repostComment != null && post.repostComment!.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(top: 10),
