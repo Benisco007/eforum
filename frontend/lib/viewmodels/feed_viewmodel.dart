@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/post_model.dart';
+import '../data/models/build_model.dart';
 import '../data/repositories/post_repository.dart';
+import '../data/repositories/build_repository.dart';
+import '../data/repositories/user_repository.dart';
 import '../data/repositories/auth_repository.dart';
 import 'auth_viewmodel.dart';
 
@@ -14,7 +17,7 @@ class FeedInitial extends FeedState {}
 class FeedLoading extends FeedState {}
 
 class FeedLoaded extends FeedState {
-  final List<PostModel> posts;
+  final List<dynamic> posts;
   final bool hasMore;
   FeedLoaded({required this.posts, this.hasMore = true});
 }
@@ -35,10 +38,23 @@ class FeedViewModel extends StateNotifier<FeedState> {
   final String? _currentUserId;
   List<String> _followingIds = [];
   FeedTab _currentTab = FeedTab.forYou;
-  StreamSubscription<List<PostModel>>? _feedSubscription;
+  StreamSubscription<List<dynamic>>? _feedSubscription;
 
   FeedViewModel(this._postRepository, this._currentUserId)
       : super(FeedInitial()) {
+    _initFollowingAndLoad();
+  }
+
+  // ─── Initialisation : charger les abonnements puis le feed ────────────────
+
+  Future<void> _initFollowingAndLoad() async {
+    if (_currentUserId != null) {
+      try {
+        _followingIds = await UserRepository().getFollowingIds(_currentUserId!);
+      } catch (_) {
+        _followingIds = [];
+      }
+    }
     loadFeed();
   }
 
@@ -52,23 +68,86 @@ class FeedViewModel extends StateNotifier<FeedState> {
     loadFeed();
   }
 
+  // ─── Combiner et trier les posts et builds ───────────────────────────────
+
+  Stream<List<dynamic>> _getCombinedStream(Stream<List<PostModel>> postsStream) {
+    final buildsStream = BuildRepository().getAllBuilds();
+    final controller = StreamController<List<dynamic>>();
+    List<PostModel> lastPosts = [];
+    List<BuildModel> lastBuilds = [];
+
+    void emit() {
+      // Pour l'onglet abonnements, filtrer les builds par les personnes suivies
+      final buildsToShow = _currentTab == FeedTab.following
+          ? lastBuilds.where((b) => _followingIds.contains(b.authorId)).toList()
+          : lastBuilds;
+
+      final combined = <dynamic>[...lastPosts, ...buildsToShow];
+      
+      // Trier par date de création décroissante (createdAt)
+      combined.sort((a, b) {
+        final dateA = (a is PostModel) ? a.createdAt : (a as BuildModel).createdAt;
+        final dateB = (b is PostModel) ? b.createdAt : (b as BuildModel).createdAt;
+        return dateB.compareTo(dateA);
+      });
+      
+      if (!controller.isClosed) {
+        controller.add(combined);
+      }
+    }
+
+    StreamSubscription? subPosts;
+    StreamSubscription? subBuilds;
+
+    controller.onListen = () {
+      subPosts = postsStream.listen((posts) {
+        lastPosts = posts;
+        emit();
+      }, onError: controller.addError);
+
+      subBuilds = buildsStream.listen((builds) {
+        lastBuilds = builds;
+        emit();
+      }, onError: controller.addError);
+    };
+
+    controller.onCancel = () {
+      subPosts?.cancel();
+      subBuilds?.cancel();
+    };
+
+    return controller.stream;
+  }
+
   // ─── Charger le feed selon l'onglet actif ─────────────────────────────────
 
   void loadFeed() {
     state = FeedLoading();
     _feedSubscription?.cancel();
 
-    final stream = _currentTab == FeedTab.forYou
+    final postsStream = _currentTab == FeedTab.forYou
         ? _postRepository.getGlobalFeed()
         : _postRepository.getFollowingFeed(followingIds: _followingIds);
 
-    _feedSubscription = stream.listen(
-      (posts) => state = FeedLoaded(posts: posts),
+    final combinedStream = _getCombinedStream(postsStream);
+
+    _feedSubscription = combinedStream.listen(
+      (items) => state = FeedLoaded(posts: items),
       onError: (e) => state = FeedError('Impossible de charger le fil : $e'),
     );
   }
 
-  // ─── Mettre à jour les IDs suivis (pour l'onglet Abonnements) ─────────────
+  // ─── Recharger les abonnements depuis Firestore puis le feed ──────────────
+
+  Future<void> refreshFollowingAndReload() async {
+    if (_currentUserId == null) return;
+    try {
+      _followingIds = await UserRepository().getFollowingIds(_currentUserId!);
+    } catch (_) {
+      _followingIds = [];
+    }
+    if (_currentTab == FeedTab.following) loadFeed();
+  }
 
   void updateFollowingIds(List<String> ids) {
     _followingIds = ids;
@@ -155,6 +234,26 @@ class FeedViewModel extends StateNotifier<FeedState> {
       return false;
     }
   }
+
+  // ─── Modifier un post ─────────────────────────────────────────────────────
+
+  Future<bool> updatePost({
+    required String postId,
+    required String newContent,
+  }) async {
+    if (_currentUserId == null) return false;
+    try {
+      await _postRepository.updatePost(
+        postId: postId,
+        userId: _currentUserId!,
+        newContent: newContent,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
 
   @override
   void dispose() {

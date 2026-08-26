@@ -250,6 +250,29 @@ class PostRepository {
     }
   }
 
+  // ─── Modifier un post ─────────────────────────────────────────────────────
+
+  Future<void> updatePost({
+    required String postId,
+    required String userId,
+    required String newContent,
+  }) async {
+    try {
+      final doc = await _posts.doc(postId).get();
+      if (!doc.exists) throw FirestoreException('Post introuvable.');
+      final data = doc.data() as Map<String, dynamic>;
+      if (data['authorId'] != userId) {
+        throw FirestoreException('Tu n\'es pas autorisé à modifier ce post.');
+      }
+      await _posts.doc(postId).update({
+        'content': newContent,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw FirestoreException('Impossible de modifier le post : $e');
+    }
+  }
+
   // ─── Posts d'un utilisateur ───────────────────────────────────────────────
 
   Stream<List<PostModel>> getUserPosts(String userId) {

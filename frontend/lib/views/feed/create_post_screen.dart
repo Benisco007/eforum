@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../viewmodels/feed_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../core/services/storage_service.dart';
+import '../builds/builds_screen.dart';
 
 const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
@@ -317,15 +318,27 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
               final label  = action['label'] as String;
               final isImage = label == 'Image';
               return GestureDetector(
-                onTap: isImage
-                    ? _pickImage
-                    : () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text('$label — bientôt disponible',
-                              style: const TextStyle(color: _txt)),
-                          backgroundColor: _card,
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 2),
-                        )),
+                onTap: () {
+                  if (label == 'Image') {
+                    _pickImage();
+                  } else if (label == 'Un build') {
+                    Navigator.pop(context); // Close CreatePostScreen
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const CreateBuildSheet(),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('$label — bientôt disponible',
+                          style: const TextStyle(color: _txt)),
+                      backgroundColor: _card,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 2),
+                    ));
+                  }
+                },
                 child: Container(
                   decoration: BoxDecoration(
                     color: isImage && _selectedImage != null
@@ -372,7 +385,18 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
             child: Icon(Icons.image_outlined, color: _neon, size: 22),
           ),
           const SizedBox(width: 20),
-          Icon(Icons.bolt_outlined, color: _build, size: 22),
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(context); // Close CreatePostScreen
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const CreateBuildSheet(),
+              );
+            },
+            child: Icon(Icons.bolt_outlined, color: _build, size: 22),
+          ),
           const SizedBox(width: 20),
           Icon(Icons.shield_outlined, color: _clan, size: 22),
           const Spacer(),

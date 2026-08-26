@@ -5,6 +5,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../viewmodels/feed_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../data/models/post_model.dart';
+import '../../data/models/build_model.dart';
 import '../../data/models/user_model.dart';
 import '../../core/router/app_router.dart';
 import '../profile/profile_screen.dart';
@@ -14,6 +15,8 @@ import 'comments_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../builds/builds_screen.dart';
 import '../clans/clan_screen.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 
 const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
@@ -220,7 +223,16 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                       child: Center(child: Text('Tu es à jour ✅', style: TextStyle(color: _mut, fontSize: 12.5))),
                     );
                   }
-                  return PostCard(post: feedState.posts[index]);
+                  final item = feedState.posts[index];
+                  if (item is PostModel) {
+                    return PostCard(post: item);
+                  } else if (item is BuildModel) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: BuildCard(build: item),
+                    );
+                  }
+                  return const SizedBox.shrink();
                 },
                 childCount: feedState.posts.length + 1,
               ),
@@ -425,7 +437,7 @@ class _PostCardState extends ConsumerState<PostCard> {
                     );
                     if (success && mounted) {
                       setState(() => _reposted = true);
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post republié ✅'), backgroundColor: _card));
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post republié', style: TextStyle(color: _txt)), backgroundColor: _card));
                     }
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: _neon, foregroundColor: _ink, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
@@ -434,6 +446,66 @@ class _PostCardState extends ConsumerState<PostCard> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showShareMenu() {
+    final author = ref.read(userProfileProvider(widget.post.authorId)).valueOrNull;
+    final username = author?.username ?? 'un joueur';
+    final content = widget.post.content;
+    final shareText = '"$username" sur eForum : "$content"';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: _line, borderRadius: BorderRadius.circular(4)),
+            ),
+            ListTile(
+              leading: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(color: _neon.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.share_rounded, color: _neon, size: 18),
+              ),
+              title: const Text('Partager via...', style: TextStyle(color: _txt, fontWeight: FontWeight.w600, fontSize: 14.5)),
+              onTap: () {
+                Navigator.pop(ctx);
+                Share.share(shareText);
+              },
+            ),
+            ListTile(
+              leading: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(color: _build.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.copy_rounded, color: _build, size: 18),
+              ),
+              title: const Text('Copier le lien du post', style: TextStyle(color: _txt, fontWeight: FontWeight.w600, fontSize: 14.5)),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await Clipboard.setData(ClipboardData(text: 'https://eforum.com/posts/${widget.post.postId}'));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Lien copié dans le presse-papiers', style: TextStyle(color: _txt)),
+                      backgroundColor: _card,
+                    ),
+                  );
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );
@@ -530,12 +602,17 @@ class _PostCardState extends ConsumerState<PostCard> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          Text(timeago.format(post.createdAt.toDate(), locale: 'fr'), style: const TextStyle(fontSize: 12, color: _mut)),
+                          Text(
+                            '${timeago.format(post.createdAt.toDate(), locale: 'fr')}${post.updatedAt != null ? ' (modifié)' : ''}',
+                            style: const TextStyle(fontSize: 12, color: _mut),
+                          ),
                           const Spacer(),
-                          const Icon(Icons.more_horiz_rounded, color: _mut, size: 20),
+                          _PostMenuButton(post: widget.post),
                         ],
                       ),
                       const SizedBox(height: 6),
+                      if (post.content.isNotEmpty)
+                        Text(post.content, style: const TextStyle(fontSize: 14.5, color: _txt, height: 1.5)),
                       if (post.mediaURLs.isNotEmpty) ...[
                           const SizedBox(height: 10),
                           ClipRRect(
@@ -601,7 +678,10 @@ class _PostCardState extends ConsumerState<PostCard> {
                 const SizedBox(width: 20),
                 _ActionButton(icon: Icons.repeat_rounded, label: '$displayReposts', color: _reposted ? _build : _mut, onTap: _reposted ? null : _showRepostDialog),
                 const Spacer(),
-                const Icon(Icons.ios_share_rounded, color: _mut, size: 18),
+                GestureDetector(
+                  onTap: _showShareMenu,
+                  child: const Icon(Icons.ios_share_rounded, color: _mut, size: 18),
+                ),
               ],
             ),
           ),
@@ -719,3 +799,238 @@ class _EmptyFollowing extends StatelessWidget {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MENU ... POST (Modifier / Supprimer)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _PostMenuButton extends ConsumerWidget {
+  final PostModel post;
+  const _PostMenuButton({required this.post});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.watch(currentUserProvider);
+    final isOwner = currentUser?.uid == post.authorId;
+
+    return GestureDetector(
+      onTap: () {
+        if (isOwner) {
+          _showOwnerMenu(context, ref);
+        } else {
+          _showGuestMenu(context, ref);
+        }
+      },
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: const Icon(Icons.more_horiz_rounded, color: _mut, size: 20),
+      ),
+    );
+  }
+
+  // ─── Menu propriétaire (Modifier / Supprimer) ──────────────────────────────
+
+  void _showOwnerMenu(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: _line, borderRadius: BorderRadius.circular(4)),
+            ),
+            // Modifier
+            ListTile(
+              leading: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(color: _neon.withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.edit_rounded, color: _neon, size: 18),
+              ),
+              title: const Text('Modifier le post', style: TextStyle(color: _txt, fontWeight: FontWeight.w600, fontSize: 14.5)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showEditDialog(context, ref);
+              },
+            ),
+            // Supprimer
+            ListTile(
+              leading: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(color: const Color(0xFFEF5350).withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF5350), size: 18),
+              ),
+              title: const Text('Supprimer le post', style: TextStyle(color: Color(0xFFEF5350), fontWeight: FontWeight.w600, fontSize: 14.5)),
+              onTap: () {
+                Navigator.pop(ctx);
+                _confirmDelete(context, ref);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Menu visiteur (Signaler) ──────────────────────────────────────────────
+
+  void _showGuestMenu(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 36, height: 4,
+              decoration: BoxDecoration(color: _line, borderRadius: BorderRadius.circular(4)),
+            ),
+            ListTile(
+              leading: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(color: const Color(0xFFFFAB40).withOpacity(0.1), shape: BoxShape.circle),
+                child: const Icon(Icons.flag_outlined, color: Color(0xFFFFAB40), size: 18),
+              ),
+              title: const Text('Signaler ce post', style: TextStyle(color: Color(0xFFFFAB40), fontWeight: FontWeight.w600, fontSize: 14.5)),
+              onTap: () {
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Post signalé. Merci !', style: TextStyle(color: _txt)), backgroundColor: _card),
+                );
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Dialog modification ───────────────────────────────────────────────────
+
+  void _showEditDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController(text: post.content);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: _surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  width: 36, height: 4,
+                  decoration: BoxDecoration(color: _line, borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
+              const Text('Modifier le post', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: _txt)),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12), border: Border.all(color: _line)),
+                child: TextField(
+                  controller: controller,
+                  style: const TextStyle(color: _txt, fontSize: 14.5, height: 1.5),
+                  maxLines: 6,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.all(14),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final newContent = controller.text.trim();
+                    if (newContent.isEmpty) return;
+                    Navigator.pop(ctx);
+                    final success = await ref.read(feedViewModelProvider.notifier).updatePost(
+                      postId: post.postId,
+                      newContent: newContent,
+                    );
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(success ? 'Post modifié' : 'Erreur lors de la modification', style: const TextStyle(color: _txt)),
+                          backgroundColor: _card,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _neon,
+                    foregroundColor: _ink,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
+                  child: const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Confirmation suppression ──────────────────────────────────────────────
+
+  void _confirmDelete(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Supprimer ce post ?', style: TextStyle(color: _txt, fontSize: 16, fontWeight: FontWeight.w700)),
+        content: const Text('Cette action est irréversible.', style: TextStyle(color: _mut, fontSize: 13.5)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuler', style: TextStyle(color: _mut, fontWeight: FontWeight.w600)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await ref.read(feedViewModelProvider.notifier).deletePost(post.postId);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success ? 'Post supprimé' : 'Erreur lors de la suppression', style: const TextStyle(color: _txt)),
+                    backgroundColor: _card,
+                  ),
+                );
+              }
+            },
+            child: const Text('Supprimer', style: TextStyle(color: Color(0xFFEF5350), fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}

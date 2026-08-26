@@ -179,8 +179,8 @@ class _CommentsScreenState extends ConsumerState<CommentsScreen> {
                             style: const TextStyle(
                                 fontSize: 14, fontWeight: FontWeight.w700, color: _txt)),
                         const SizedBox(width: 6),
-                        Text(
-                          timeago.format(post.createdAt.toDate(), locale: 'fr'),
+                         Text(
+                          '${timeago.format(post.createdAt.toDate(), locale: 'fr')}${post.updatedAt != null ? ' (modifié)' : ''}',
                           style: const TextStyle(fontSize: 12, color: _mut),
                         ),
                       ],
