@@ -15,6 +15,8 @@ import 'comments_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../builds/builds_screen.dart';
 import '../clans/clan_screen.dart';
+import '../polls/polls_screen.dart';
+import '../../data/models/poll_model.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -230,6 +232,11 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       child: BuildCard(build: item),
+                    );
+                  } else if (item is PollModel) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: PollCard(poll: item),
                     );
                   }
                   return const SizedBox.shrink();

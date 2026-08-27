@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/post_model.dart';
 import '../data/models/build_model.dart';
+import '../data/models/poll_model.dart';
 import '../data/repositories/post_repository.dart';
 import '../data/repositories/build_repository.dart';
+import '../data/repositories/poll_repository.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/repositories/auth_repository.dart';
 import 'auth_viewmodel.dart';
@@ -72,32 +75,42 @@ class FeedViewModel extends StateNotifier<FeedState> {
 
   Stream<List<dynamic>> _getCombinedStream(Stream<List<PostModel>> postsStream) {
     final buildsStream = BuildRepository().getAllBuilds();
+    final pollsStream  = PollRepository().getRecentPolls();
     final controller = StreamController<List<dynamic>>();
-    List<PostModel> lastPosts = [];
+    List<PostModel>  lastPosts  = [];
     List<BuildModel> lastBuilds = [];
+    List<PollModel>  lastPolls  = [];
 
     void emit() {
-      // Pour l'onglet abonnements, filtrer les builds par les personnes suivies
+      // Pour l'onglet abonnements, filtrer builds et polls par les personnes suivies
       final buildsToShow = _currentTab == FeedTab.following
           ? lastBuilds.where((b) => _followingIds.contains(b.authorId)).toList()
           : lastBuilds;
+      final pollsToShow = _currentTab == FeedTab.following
+          ? lastPolls.where((p) => _followingIds.contains(p.authorId)).toList()
+          : lastPolls;
 
-      final combined = <dynamic>[...lastPosts, ...buildsToShow];
-      
-      // Trier par date de création décroissante (createdAt)
+      final combined = <dynamic>[...lastPosts, ...buildsToShow, ...pollsToShow];
+
+      // Trier par date de création décroissante
       combined.sort((a, b) {
-        final dateA = (a is PostModel) ? a.createdAt : (a as BuildModel).createdAt;
-        final dateB = (b is PostModel) ? b.createdAt : (b as BuildModel).createdAt;
+        Timestamp dateA;
+        Timestamp dateB;
+        if (a is PostModel)       dateA = a.createdAt;
+        else if (a is BuildModel) dateA = a.createdAt;
+        else                      dateA = (a as PollModel).createdAt;
+        if (b is PostModel)       dateB = b.createdAt;
+        else if (b is BuildModel) dateB = b.createdAt;
+        else                      dateB = (b as PollModel).createdAt;
         return dateB.compareTo(dateA);
       });
-      
-      if (!controller.isClosed) {
-        controller.add(combined);
-      }
+
+      if (!controller.isClosed) controller.add(combined);
     }
 
     StreamSubscription? subPosts;
     StreamSubscription? subBuilds;
+    StreamSubscription? subPolls;
 
     controller.onListen = () {
       subPosts = postsStream.listen((posts) {
@@ -109,11 +122,17 @@ class FeedViewModel extends StateNotifier<FeedState> {
         lastBuilds = builds;
         emit();
       }, onError: controller.addError);
+
+      subPolls = pollsStream.listen((polls) {
+        lastPolls = polls;
+        emit();
+      }, onError: controller.addError);
     };
 
     controller.onCancel = () {
       subPosts?.cancel();
       subBuilds?.cancel();
+      subPolls?.cancel();
     };
 
     return controller.stream;

@@ -9,6 +9,7 @@ import '../../viewmodels/feed_viewmodel.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../core/services/storage_service.dart';
 import '../builds/builds_screen.dart';
+import '../polls/polls_screen.dart';
 
 const _ink     = Color(0xFF07090F);
 const _surface = Color(0xFF0E1119);
@@ -287,10 +288,9 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
 
   Widget _buildAddToPost() {
     final actions = [
-      {'icon': Icons.image_outlined,         'label': 'Image',   'color': _neon},
-      {'icon': Icons.bolt_outlined,           'label': 'Un build','color': _build},
-      {'icon': Icons.shield_outlined,         'label': 'Un clan', 'color': _clan},
-      {'icon': Icons.people_outline_rounded,  'label': 'Sondage', 'color': _chat},
+      {'icon': Icons.image_outlined, 'label': 'Image',    'color': _neon},
+      {'icon': Icons.bolt_outlined,  'label': 'Un build', 'color': _build},
+      {'icon': Icons.poll_rounded,   'label': 'Sondage',  'color': _chat},
     ];
 
     return Container(
@@ -322,21 +322,21 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
                   if (label == 'Image') {
                     _pickImage();
                   } else if (label == 'Un build') {
-                    Navigator.pop(context); // Close CreatePostScreen
+                    Navigator.pop(context);
                     showModalBottomSheet(
                       context: context,
                       isScrollControlled: true,
                       backgroundColor: Colors.transparent,
                       builder: (_) => const CreateBuildSheet(),
                     );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text('$label — bientôt disponible',
-                          style: const TextStyle(color: _txt)),
-                      backgroundColor: _card,
-                      behavior: SnackBarBehavior.floating,
-                      duration: const Duration(seconds: 2),
-                    ));
+                  } else if (label == 'Sondage') {
+                    Navigator.pop(context);
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const CreatePollSheet(),
+                    );
                   }
                 },
                 child: Container(
@@ -387,7 +387,7 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
           const SizedBox(width: 20),
           GestureDetector(
             onTap: () {
-              Navigator.pop(context); // Close CreatePostScreen
+              Navigator.pop(context);
               showModalBottomSheet(
                 context: context,
                 isScrollControlled: true,
@@ -398,7 +398,18 @@ class _CreatePostScreenState extends ConsumerState<CreatePostScreen> {
             child: Icon(Icons.bolt_outlined, color: _build, size: 22),
           ),
           const SizedBox(width: 20),
-          Icon(Icons.shield_outlined, color: _clan, size: 22),
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(context);
+              showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder: (_) => const CreatePollSheet(),
+              );
+            },
+            child: Icon(Icons.poll_rounded, color: _chat, size: 22),
+          ),
           const Spacer(),
           if (_charCount > 0) ...[
             Text(

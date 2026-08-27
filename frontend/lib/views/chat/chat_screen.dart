@@ -7,6 +7,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../core/constants/firebase_constants.dart';
+import '../../data/repositories/user_repository.dart';
+import '../../data/models/user_model.dart';
 
 // ─── Couleurs eForum ──────────────────────────────────────────────────────────
 
@@ -46,7 +48,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
@@ -75,7 +77,12 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
           ),
         ],
       ),
-      floatingActionButton: _buildFAB(),
+      floatingActionButton: currentUser == null
+          ? null
+          : GestureDetector(
+              onTap: () => _showNewMessageSheet(context, currentUser.uid),
+              child: _buildFAB(),
+            ),
     );
   }
 
@@ -112,22 +119,6 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
                   ),
                 ),
                 const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _chat,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                  child: const Text(
-                    '4',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF2A0D02),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -169,7 +160,7 @@ class _MessagesScreenState extends ConsumerState<MessagesScreen>
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
             child: Row(
-              children: ['Tous', 'Non lus', 'Clans'].asMap().entries.map((e) {
+              children: ['Tous', 'Non lus'].asMap().entries.map((e) {
                 final isActive = _tabController.index == e.key;
                 return GestureDetector(
                   onTap: () => setState(() => _tabController.index = e.key),
@@ -224,12 +215,21 @@ Widget _buildConversationList(String uid) {
 
       final docs = snapshot.data?.docs ?? [];
 
-      if (docs.isEmpty) {
+      var filtered = [...docs];
+      if (_tabController.index == 1) {
+        filtered = filtered.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          final unreadCount = (data['unreadCount'] as Map<String, dynamic>?)?[uid] ?? 0;
+          return unreadCount > 0;
+        }).toList();
+      }
+
+      if (filtered.isEmpty) {
         return _buildEmpty();
       }
 
       // Tri côté client — évite le flash causé par orderBy + serverTimestamp
-      final sorted = [...docs];
+      final sorted = [...filtered];
       sorted.sort((a, b) {
         final aData = a.data() as Map<String, dynamic>;
         final bData = b.data() as Map<String, dynamic>;
@@ -338,6 +338,242 @@ Widget _buildConversationList(String uid) {
       ),
       child: const Icon(Icons.add_rounded,
           color: Color(0xFF2A0D02), size: 28),
+    );
+  }
+
+  void _showNewMessageSheet(BuildContext context, String currentUserId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _NewConversationSheet(currentUserId: currentUserId),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NEW CONVERSATION SHEET
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _NewConversationSheet extends StatefulWidget {
+  final String currentUserId;
+  const _NewConversationSheet({required this.currentUserId});
+
+  @override
+  State<_NewConversationSheet> createState() => _NewConversationSheetState();
+}
+
+class _NewConversationSheetState extends State<_NewConversationSheet> {
+  final _ctrl = TextEditingController();
+  List<UserModel> _searchResults = [];
+  bool _searching = false;
+  bool _loadingFollowing = true;
+  List<UserModel> _followingUsers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFollowing();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadFollowing() async {
+    try {
+      final followingIds = await UserRepository().getFollowingIds(widget.currentUserId);
+      if (followingIds.isEmpty) {
+        if (mounted) setState(() => _loadingFollowing = false);
+        return;
+      }
+      final List<UserModel> users = [];
+      for (final id in followingIds) {
+        final u = await UserRepository().getUserById(id);
+        if (u != null) users.add(u);
+      }
+      if (mounted) {
+        setState(() {
+          _followingUsers = users;
+          _loadingFollowing = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingFollowing = false);
+    }
+  }
+
+  Future<void> _onSearch(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _searching = false;
+      });
+      return;
+    }
+    setState(() => _searching = true);
+    try {
+      final results = await UserRepository().searchUsers(q);
+      final filteredResults = results.where((u) => u.uid != widget.currentUserId).toList();
+      if (mounted) {
+        setState(() {
+          _searchResults = filteredResults;
+          _searching = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Future<void> _startConversation(UserModel otherUser) async {
+    final ids = [widget.currentUserId, otherUser.uid]..sort();
+    final convId = '${ids[0]}_${ids[1]}';
+
+    final ref = FirebaseFirestore.instance
+        .collection(FirebaseConstants.conversations)
+        .doc(convId);
+    
+    final doc = await ref.get();
+    if (!doc.exists) {
+      await ref.set({
+        'participants': [widget.currentUserId, otherUser.uid],
+        'lastMessage': null,
+        'lastMessageAt': null,
+        'unreadCount': {widget.currentUserId: 0, otherUser.uid: 0},
+      });
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: convId,
+            otherUserId: otherUser.uid,
+            otherUsername: otherUser.username,
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final isSearching = _ctrl.text.trim().isNotEmpty;
+    final displayList = isSearching ? _searchResults : _followingUsers;
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 16),
+      decoration: const BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36, height: 4,
+              decoration: BoxDecoration(
+                color: _line,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Nouveau message',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: _txt),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            height: 44,
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _line),
+            ),
+            child: Row(
+              children: [
+                const SizedBox(width: 12),
+                const Icon(Icons.search_rounded, color: _mut, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    style: const TextStyle(fontSize: 14, color: _txt),
+                    onChanged: _onSearch,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Rechercher un joueur par son nom...',
+                      hintStyle: TextStyle(color: _mut, fontSize: 13.5),
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            isSearching ? 'RÉSULTATS DE RECHERCHE' : 'ABONNEMENTS',
+            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: _mut, letterSpacing: 1.5),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _searching || (_loadingFollowing && !isSearching)
+                ? const Center(child: CircularProgressIndicator(color: _chat, strokeWidth: 2))
+                : displayList.isEmpty
+                    ? Center(
+                        child: Text(
+                          isSearching ? 'Aucun joueur trouvé' : 'Abonne-toi à des joueurs pour leur écrire',
+                          style: const TextStyle(color: _mut, fontSize: 13.5),
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: displayList.length,
+                        itemBuilder: (context, index) {
+                          final user = displayList[index];
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Container(
+                              width: 38, height: 38,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _neon.withOpacity(0.12),
+                                border: Border.all(color: _line),
+                                image: user.photoURL != null
+                                    ? DecorationImage(image: NetworkImage(user.photoURL!), fit: BoxFit.cover)
+                                    : null,
+                              ),
+                              child: user.photoURL == null
+                                  ? const Icon(Icons.person_rounded, color: _neon, size: 18)
+                                  : null,
+                            ),
+                            title: Text(
+                              user.username,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _txt),
+                            ),
+                            subtitle: Text(
+                              '@${user.username}',
+                              style: const TextStyle(fontSize: 12, color: _mut),
+                            ),
+                            onTap: () => _startConversation(user),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }
