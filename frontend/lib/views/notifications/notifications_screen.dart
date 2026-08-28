@@ -38,6 +38,7 @@ const _notifMeta = {
   'comment':      _NotifMeta(icon: Icons.chat_bubble_outline_rounded, color: Color(0xFF00E676), emoji: '💬'),
   'repost':       _NotifMeta(icon: Icons.repeat_rounded,            color: Color(0xFFCE93D8), emoji: '🔁'),
   'announcement': _NotifMeta(icon: Icons.campaign_rounded,          color: Color(0xFFFFCC02), emoji: '📢'),
+  'duel':         _NotifMeta(icon: Icons.sports_kabaddi_rounded,    color: Color(0xFFFF8A65), emoji: '⚔️'),
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -322,6 +323,8 @@ class _NotifCard extends StatelessWidget {
         return 'a republié ton post.';
       case 'announcement':
         return 'Nouvelle annonce officielle.';
+      case 'duel':
+        return 'te demande en duel.';
       default:
         return 'a interagi avec toi.';
     }

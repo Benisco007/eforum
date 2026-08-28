@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -148,11 +149,17 @@ class NotificationService {
       final playerId = userDoc.data()?['oneSignalPlayerId'] as String?;
       if (playerId == null) return;
 
-      // L'envoi OneSignal doit être effectué par un backend de confiance.
-      debugPrint(
-        '⚠️ Push OneSignal non envoyée côté client pour $recipientUid '
-        '(playerId: $playerId, title: $title, body: $body, data: $data)',
+      final response = await Supabase.instance.client.functions.invoke(
+        'send-push',
+        body: {
+          'playerId': playerId,
+          'title': title,
+          'body': body,
+          'data': data ?? {},
+        },
       );
+
+      debugPrint('✅ Push OneSignal envoyée à $recipientUid: ${response.data}');
     } catch (e) {
       debugPrint('❌ Erreur envoi notification : $e');
     }
@@ -191,6 +198,7 @@ class NotificationService {
         'follow':       '$senderName a commencé à te suivre 👤',
         'repost':       '$senderName a republié ton post 🔁',
         'announcement': 'Nouvelle annonce officielle eForum 📢',
+        'duel':         '$senderName te demande en duel ⚔️',
       };
 
       final body = messages[type] ?? '$senderName a interagi avec toi';

@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import '../../viewmodels/auth_viewmodel.dart';
 import '../../core/constants/firebase_constants.dart';
+import '../../core/services/notification_service.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/models/user_model.dart';
 
@@ -818,6 +819,87 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _requestDuel() async {
+    final currentUser = ref.read(currentUserProvider);
+    if (currentUser == null || _isSending) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _card,
+        icon: const Icon(Icons.shield_rounded, color: _chat, size: 40),
+        title: const Text(
+          'Demander un duel ?',
+          style: TextStyle(color: _txt, fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          'Une demande sera envoyée à ${widget.otherUsername}.',
+          style: const TextStyle(color: _mut),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Annuler', style: TextStyle(color: _mut)),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.shield_rounded, size: 18),
+            label: const Text('Envoyer'),
+            style: FilledButton.styleFrom(
+              backgroundColor: _chat,
+              foregroundColor: Color(0xFF2A0D02),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSending = true);
+
+    try {
+      final duelMessage = '${currentUser.username} te demande en duel';
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      final convRef = firestore
+          .collection(FirebaseConstants.conversations)
+          .doc(widget.conversationId);
+      final msgRef = convRef.collection(FirebaseConstants.messages).doc();
+
+      batch.set(msgRef, {
+        'messageId': msgRef.id,
+        'conversationId': widget.conversationId,
+        'senderId': currentUser.uid,
+        'content': duelMessage,
+        'sentAt': FieldValue.serverTimestamp(),
+        'read': false,
+        'type': 'duel',
+      });
+      batch.set(convRef, {
+        'lastMessage': duelMessage,
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'unreadCount': {
+          widget.otherUserId: FieldValue.increment(1),
+          currentUser.uid: 0,
+        },
+      }, SetOptions(merge: true));
+
+      await batch.commit();
+      await NotificationService.createNotification(
+        recipientId: widget.otherUserId,
+        type: 'duel',
+        senderId: currentUser.uid,
+        senderName: currentUser.username,
+        targetType: 'conversation',
+        targetId: widget.conversationId,
+      );
+    } catch (_) {
+      // The chat remains usable if the duel request cannot be sent.
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUser = ref.watch(currentUserProvider);
@@ -901,14 +983,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ),
 
-        // Menu
-        GestureDetector(
-          onTap: () {},
-          child: const SizedBox(
-            width: 40,
-            height: 40,
-            child: Icon(Icons.more_horiz_rounded, color: _mut, size: 22),
-          ),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_horiz_rounded, color: _mut, size: 22),
+          color: _card,
+          onSelected: (value) {
+            if (value == 'duel') _requestDuel();
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem<String>(
+              value: 'duel',
+              child: Row(
+                children: [
+                  Icon(Icons.shield_rounded, color: _chat, size: 20),
+                  SizedBox(width: 10),
+                  Text('Demander en duel', style: TextStyle(color: _txt)),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     ),
@@ -972,13 +1064,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             final DateTime? date =
                 sentAt is Timestamp ? sentAt.toDate() : null;
 
-            return _MessageBubble(
-              content: content,
-              isMe: isMe,
-              time: date != null
-                  ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
-                  : '',
-            );
+            final time = date != null
+                ? '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}'
+                : '';
+            return data['type'] == 'duel'
+                ? _DuelMessageCard(content: content, isMe: isMe, time: time)
+                : _MessageBubble(content: content, isMe: isMe, time: time);
           },
         );
       },
@@ -1181,6 +1272,88 @@ class _MessageBubble extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DuelMessageCard extends StatelessWidget {
+  final String content;
+  final bool isMe;
+  final String time;
+
+  const _DuelMessageCard({
+    required this.content,
+    required this.isMe,
+    required this.time,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.78,
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _chat.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: _chat.withOpacity(0.65)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: _chat.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.shield_rounded, color: _chat, size: 23),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'DÉFI DUEL',
+                    style: TextStyle(
+                      color: _chat,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                Text(time, style: const TextStyle(color: _mut, fontSize: 10.5)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              content,
+              style: const TextStyle(
+                color: _txt,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: null,
+                icon: const Icon(Icons.sports_esports_rounded, size: 17),
+                label: const Text('Bientôt disponible'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _mut,
+                  side: const BorderSide(color: _line),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
