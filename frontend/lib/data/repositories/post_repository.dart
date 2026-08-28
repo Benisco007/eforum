@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/post_model.dart';
 import '../../core/constants/firebase_constants.dart';
 import '../../core/errors/app_exceptions.dart';
+import '../../core/services/notification_service.dart';
 
 class PostRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -81,6 +82,23 @@ class PostRepository {
       );
 
       await batch.commit();
+
+      // Notifier l'auteur du post original
+      final originalDoc = await _posts.doc(originalPostId).get();
+      final originalAuthorId = (originalDoc.data() as Map<String, dynamic>?)?['authorId'] as String?;
+      if (originalAuthorId != null && originalAuthorId != authorId) {
+        final senderDoc = await _firestore.collection(FirebaseConstants.users).doc(authorId).get();
+        final senderName = (senderDoc.data() as Map<String, dynamic>?)?['username'] as String? ?? 'Un joueur';
+        await NotificationService.createNotification(
+          recipientId: originalAuthorId,
+          type: 'repost',
+          senderId: authorId,
+          senderName: senderName,
+          targetType: 'post',
+          targetId: originalPostId,
+        );
+      }
+
       return post;
     } catch (e) {
       throw FirestoreException('Impossible de republier le post : $e');
@@ -136,23 +154,38 @@ class PostRepository {
       final postRef = _posts.doc(postId);
       final likeRef = postRef.collection(FirebaseConstants.likes).doc(userId);
 
+      bool isNowLiked = false;
+      String? postAuthorId;
+
       await _firestore.runTransaction((transaction) async {
         final likeDoc = await transaction.get(likeRef);
+        final postDoc = await transaction.get(postRef);
+        postAuthorId = (postDoc.data() as Map<String, dynamic>?)?['authorId'] as String?;
 
         if (likeDoc.exists) {
           transaction.delete(likeRef);
-          transaction.update(postRef, {
-            'likesCount': FieldValue.increment(-1),
-          });
+          transaction.update(postRef, {'likesCount': FieldValue.increment(-1)});
+          isNowLiked = false;
         } else {
-          transaction.set(likeRef, {
-            'likedAt': FieldValue.serverTimestamp(),
-          });
-          transaction.update(postRef, {
-            'likesCount': FieldValue.increment(1),
-          });
+          transaction.set(likeRef, {'likedAt': FieldValue.serverTimestamp()});
+          transaction.update(postRef, {'likesCount': FieldValue.increment(1)});
+          isNowLiked = true;
         }
       });
+
+      // Notifier l'auteur si c'est un like (pas un unlike)
+      if (isNowLiked && postAuthorId != null && postAuthorId != userId) {
+        final senderDoc = await _firestore.collection(FirebaseConstants.users).doc(userId).get();
+        final senderName = (senderDoc.data() as Map<String, dynamic>?)?['username'] as String? ?? 'Un joueur';
+        await NotificationService.createNotification(
+          recipientId: postAuthorId!,
+          type: 'like',
+          senderId: userId,
+          senderName: senderName,
+          targetType: 'post',
+          targetId: postId,
+        );
+      }
     } catch (e) {
       throw FirestoreException('Impossible de liker le post : $e');
     }
@@ -215,6 +248,22 @@ class PostRepository {
       });
 
       await batch.commit();
+
+      // Notifier l'auteur du post
+      final postDoc = await _posts.doc(postId).get();
+      final postAuthorId = (postDoc.data() as Map<String, dynamic>?)?['authorId'] as String?;
+      if (postAuthorId != null && postAuthorId != authorId) {
+        final senderDoc = await _firestore.collection(FirebaseConstants.users).doc(authorId).get();
+        final senderName = (senderDoc.data() as Map<String, dynamic>?)?['username'] as String? ?? 'Un joueur';
+        await NotificationService.createNotification(
+          recipientId: postAuthorId,
+          type: 'comment',
+          senderId: authorId,
+          senderName: senderName,
+          targetType: 'post',
+          targetId: postId,
+        );
+      }
     } catch (e) {
       throw FirestoreException('Impossible d\'ajouter le commentaire : $e');
     }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/build_model.dart';
 import '../../core/constants/firebase_constants.dart';
 import '../../core/errors/app_exceptions.dart';
+import '../../core/services/notification_service.dart';
 
 class BuildRepository {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -68,14 +69,34 @@ class BuildRepository {
     final buildRef = _db.collection(FirebaseConstants.builds).doc(buildId);
     final batch = _db.batch();
     final likeDoc = await likeRef.get();
+    bool isNowLiked = false;
+
     if (likeDoc.exists) {
       batch.delete(likeRef);
       batch.update(buildRef, {'likesCount': FieldValue.increment(-1)});
     } else {
       batch.set(likeRef, {'likedAt': Timestamp.now()});
       batch.update(buildRef, {'likesCount': FieldValue.increment(1)});
+      isNowLiked = true;
     }
     await batch.commit();
+
+    if (isNowLiked) {
+      final buildDoc = await buildRef.get();
+      final buildAuthorId = (buildDoc.data() as Map<String, dynamic>?)?['authorId'] as String?;
+      if (buildAuthorId != null && buildAuthorId != userId) {
+        final senderDoc = await _db.collection(FirebaseConstants.users).doc(userId).get();
+        final senderName = (senderDoc.data() as Map<String, dynamic>?)?['username'] as String? ?? 'Un joueur';
+        await NotificationService.createNotification(
+          recipientId: buildAuthorId,
+          type: 'like',
+          senderId: userId,
+          senderName: senderName,
+          targetType: 'build',
+          targetId: buildId,
+        );
+      }
+    }
   }
 
   // ─── Vérifier si liké ─────────────────────────────────────────────────────

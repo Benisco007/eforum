@@ -60,7 +60,7 @@ class AuthViewModel extends StateNotifier<AuthState> {
         password: password,
       );
       state = AuthAuthenticated(user);
-      NotificationService().saveTokenToFirestore(user.uid);
+      NotificationService().savePlayerIdToFirestore(user.uid);
     } catch (e) {
       state = AuthError(e.toString());
     }
@@ -78,7 +78,7 @@ class AuthViewModel extends StateNotifier<AuthState> {
         password: password,
       );
       state = AuthAuthenticated(user);
-      NotificationService().saveTokenToFirestore(user.uid);
+      NotificationService().savePlayerIdToFirestore(user.uid);
     } catch (e) {
       state = AuthError(e.toString());
     }
@@ -91,7 +91,7 @@ class AuthViewModel extends StateNotifier<AuthState> {
       await _repository.logout();
       if (state is AuthAuthenticated) {
         final uid = (state as AuthAuthenticated).user.uid;
-        await NotificationService().deleteToken(uid);
+        await NotificationService().clearPlayerId(uid);
       }
       state = AuthUnauthenticated();
     } catch (e) {

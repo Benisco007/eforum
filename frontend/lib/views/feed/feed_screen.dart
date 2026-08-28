@@ -222,7 +222,7 @@ class _FeedScreenState extends ConsumerState<FeedScreen>
                   if (index == feedState.posts.length) {
                     return const Padding(
                       padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Center(child: Text('Tu es à jour ✅', style: TextStyle(color: _mut, fontSize: 12.5))),
+                      child: Center(child: Text('Tu es à jour ', style: TextStyle(color: _mut, fontSize: 12.5))),
                     );
                   }
                   final item = feedState.posts[index];
@@ -1040,4 +1040,4 @@ class _PostMenuButton extends ConsumerWidget {
       ),
     );
   }
-}
+}

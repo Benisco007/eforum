@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../../core/constants/firebase_constants.dart';
 import '../../core/errors/app_exceptions.dart';
+import '../../core/services/notification_service.dart';
 
 class UserRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -86,6 +87,7 @@ class UserRepository {
 
       final isFollowing = (await followingRef.get()).exists;
       final batch = _firestore.batch();
+      bool isNowFollowing = false;
 
       if (isFollowing) {
         // Unfollow
@@ -107,9 +109,23 @@ class UserRepository {
         batch.update(_users.doc(targetUserId), {
           'followersCount': FieldValue.increment(1),
         });
+        isNowFollowing = true;
       }
 
       await batch.commit();
+
+      if (isNowFollowing) {
+        final senderDoc = await _users.doc(currentUserId).get();
+        final senderName = (senderDoc.data() as Map<String, dynamic>?)?['username'] as String? ?? 'Un joueur';
+        await NotificationService.createNotification(
+          recipientId: targetUserId,
+          type: 'follow',
+          senderId: currentUserId,
+          senderName: senderName,
+          targetType: 'user',
+          targetId: currentUserId,
+        );
+      }
     } catch (e) {
       throw FirestoreException('Impossible de suivre/ne plus suivre : $e');
     }

@@ -1,14 +1,14 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-// ─── Handler background (doit être top-level) ─────────────────────────────────
+// ─── Constantes OneSignal ─────────────────────────────────────────────────────
 
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  // Firebase est déjà initialisé dans main.dart
-  debugPrint('🔔 Notif background : ${message.notification?.title}');
+class _OneSignalConfig {
+  static const appId     = '73f7c7e9-bd2f-4ecf-ad4d-701f93be7651';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -20,149 +20,145 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
-  final FirebaseMessaging _fcm = FirebaseMessaging.instance;
-  final FlutterLocalNotificationsPlugin _localNotif =
+  final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  // ─── Initialiser le service ────────────────────────────────────────────────
+  // ─── Initialiser OneSignal & Local Notifications ───────────────────────────
 
   Future<void> initialize() async {
-    // 1. Demander la permission
-    final settings = await _fcm.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    // 1. OneSignal
+    OneSignal.Debug.setLogLevel(OSLogLevel.warn);
+    OneSignal.initialize(_OneSignalConfig.appId);
+    OneSignal.Notifications.requestPermission(true);
+    debugPrint('✅ OneSignal initialisé');
 
-    if (settings.authorizationStatus == AuthorizationStatus.denied) {
-      debugPrint('❌ Permission notifications refusée');
-      return;
-    }
-
-    // 2. Configurer les notifications locales (Android)
-    const androidSettings =
+    // 2. Local Notifications (Timezone & Init)
+    tz.initializeTimeZones();
+    const AndroidInitializationSettings androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const initSettings = InitializationSettings(android: androidSettings);
-    await _localNotif.initialize(initSettings);
-
-    // 3. Créer le canal Android
-    const androidChannel = AndroidNotificationChannel(
-      'eforum_channel',
-      'eForum Notifications',
-      description: 'Notifications de la communauté eForum',
-      importance: Importance.high,
+    const DarwinInitializationSettings iosSettings =
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
     );
-    await _localNotif
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(androidChannel);
-
-    // 4. Handler background
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
-    // 5. Handler foreground
-    FirebaseMessaging.onMessage.listen(_onForegroundMessage);
-
-    // 6. Handler tap notif (app en background)
-    FirebaseMessaging.onMessageOpenedApp.listen(_onMessageOpenedApp);
-
-    // 7. Vérifier si app ouverte depuis une notif
-    final initialMessage = await _fcm.getInitialMessage();
-    if (initialMessage != null) {
-      _handleNotificationTap(initialMessage.data);
-    }
-
-    debugPrint('✅ NotificationService initialisé');
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidSettings,
+      iOS: iosSettings,
+    );
+    await _localNotificationsPlugin.initialize(initSettings);
+    debugPrint('✅ Notifications locales initialisées');
   }
 
-  // ─── Sauvegarder le token FCM dans Firestore ───────────────────────────────
+  // ─── Planifier la notification d'inactivité (24h) ──────────────────────────
 
-  Future<void> saveTokenToFirestore(String uid) async {
+  Future<void> scheduleInactivityNotification() async {
     try {
-      final token = await _fcm.getToken();
-      if (token == null) return;
+      await _localNotificationsPlugin.cancel(999);
+
+      const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'inactivity_channel',
+        'Inactivité',
+        channelDescription: 'Rappels après inactivité prolongée',
+        importance: Importance.max,
+        priority: Priority.high,
+      );
+
+      const NotificationDetails platformDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: DarwinNotificationDetails(),
+      );
+
+      final scheduledDate = tz.TZDateTime.now(tz.local).add(const Duration(hours: 24));
+
+      await _localNotificationsPlugin.zonedSchedule(
+        999,
+        'Tu as disparu un long moment... 🏟️',
+        'Reviens et affronte les joueurs de la commu efootball !',
+        scheduledDate,
+        platformDetails,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+      debugPrint('⏰ Notification d\'inactivité planifiée pour le : $scheduledDate');
+    } catch (e) {
+      debugPrint('❌ Erreur planification notification d\'inactivité : $e');
+    }
+  }
+
+  // ─── Annuler la notification d'inactivité ──────────────────────────────────
+
+  Future<void> cancelInactivityNotification() async {
+    try {
+      await _localNotificationsPlugin.cancel(999);
+      debugPrint('🚫 Notification d\'inactivité annulée');
+    } catch (e) {
+      debugPrint('❌ Erreur annulation notification d\'inactivité : $e');
+    }
+  }
+
+  // ─── Sauvegarder le Player ID dans Firestore ──────────────────────────────
+
+  Future<void> savePlayerIdToFirestore(String uid) async {
+    try {
+      final playerId = OneSignal.User.pushSubscription.id;
+      if (playerId == null) return;
 
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'fcmToken': token,
-        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        'oneSignalPlayerId': playerId,
+        'oneSignalUpdatedAt': FieldValue.serverTimestamp(),
       });
 
-      debugPrint('✅ Token FCM sauvegardé : ${token.substring(0, 20)}…');
-
-      // Écouter les rafraîchissements du token
-      _fcm.onTokenRefresh.listen((newToken) async {
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          'fcmToken': newToken,
-          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
-        });
-      });
+      debugPrint('✅ OneSignal Player ID sauvegardé : $playerId');
     } catch (e) {
-      debugPrint('❌ Erreur sauvegarde token FCM : $e');
+      debugPrint('❌ Erreur sauvegarde Player ID : $e');
     }
   }
 
-  // ─── Supprimer le token à la déconnexion ───────────────────────────────────
+  // ─── Supprimer le Player ID à la déconnexion ──────────────────────────────
 
-  Future<void> deleteToken(String uid) async {
+  Future<void> clearPlayerId(String uid) async {
     try {
-      await _fcm.deleteToken();
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'fcmToken': FieldValue.delete(),
+        'oneSignalPlayerId': FieldValue.delete(),
       });
-      debugPrint('✅ Token FCM supprimé');
+      OneSignal.logout();
+      debugPrint('✅ OneSignal Player ID supprimé');
     } catch (e) {
-      debugPrint('❌ Erreur suppression token FCM : $e');
+      debugPrint('❌ Erreur suppression Player ID : $e');
     }
   }
 
-  // ─── Afficher une notification locale (app en foreground) ─────────────────
+  // ─── Envoyer une notification push ────────────────────────────────────────
 
-  Future<void> _onForegroundMessage(RemoteMessage message) async {
-    final notification = message.notification;
-    if (notification == null) return;
+  static Future<void> sendPushNotification({
+    required String recipientUid,
+    required String title,
+    required String body,
+    Map<String, String>? data,
+  }) async {
+    try {
+      // Récupérer le Player ID du destinataire
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(recipientUid)
+          .get();
 
-    debugPrint('🔔 Notif foreground : ${notification.title}');
+      final playerId = userDoc.data()?['oneSignalPlayerId'] as String?;
+      if (playerId == null) return;
 
-    await _localNotif.show(
-      notification.hashCode,
-      notification.title,
-      notification.body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          'eforum_channel',
-          'eForum Notifications',
-          channelDescription: 'Notifications de la communauté eForum',
-          importance: Importance.high,
-          priority: Priority.high,
-          icon: '@mipmap/ic_launcher',
-        ),
-      ),
-      payload: message.data.toString(),
-    );
+      // L'envoi OneSignal doit être effectué par un backend de confiance.
+      debugPrint(
+        '⚠️ Push OneSignal non envoyée côté client pour $recipientUid '
+        '(playerId: $playerId, title: $title, body: $body, data: $data)',
+      );
+    } catch (e) {
+      debugPrint('❌ Erreur envoi notification : $e');
+    }
   }
 
-  // ─── Gérer le tap sur une notif (app en background) ───────────────────────
-
-  void _onMessageOpenedApp(RemoteMessage message) {
-    debugPrint('🔔 Notif tapée depuis background : ${message.data}');
-    _handleNotificationTap(message.data);
-  }
-
-  // ─── Navigation selon le type de notif ────────────────────────────────────
-
-  void _handleNotificationTap(Map<String, dynamic> data) {
-    final type = data['type'] as String?;
-    final targetId = data['targetId'] as String?;
-
-    debugPrint('🔔 Type: $type — Target: $targetId');
-
-    // La navigation sera gérée par go_router
-    // On stocke les données pour que l'app puisse naviguer au démarrage
-    // Cette logique sera étendue avec un NavigationService si nécessaire
-  }
-
-  // ─── Créer une notif dans Firestore ───────────────────────────────────────
-  // Utilisé pour les notifs in-app (likes, follows, commentaires...)
+  // ─── Créer une notif in-app dans Firestore ────────────────────────────────
 
   static Future<void> createNotification({
     required String recipientId,
@@ -173,6 +169,10 @@ class NotificationService {
     required String targetId,
   }) async {
     try {
+      // Pas de notif à soi-même
+      if (recipientId == senderId) return;
+
+      // Créer dans Firestore
       await FirebaseFirestore.instance.collection('notifications').add({
         'recipientId': recipientId,
         'type': type,
@@ -183,6 +183,29 @@ class NotificationService {
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
       });
+
+      // Envoyer la push notification
+      final messages = {
+        'like':         '$senderName a aimé ton post ❤️',
+        'comment':      '$senderName a commenté ton post 💬',
+        'follow':       '$senderName a commencé à te suivre 👤',
+        'repost':       '$senderName a republié ton post 🔁',
+        'announcement': 'Nouvelle annonce officielle eForum 📢',
+      };
+
+      final body = messages[type] ?? '$senderName a interagi avec toi';
+
+      await sendPushNotification(
+        recipientUid: recipientId,
+        title: 'eForum',
+        body: body,
+        data: {
+          'type': type,
+          'targetId': targetId,
+          'targetType': targetType,
+          'senderId': senderId,
+        },
+      );
     } catch (e) {
       debugPrint('❌ Erreur création notif : $e');
     }
